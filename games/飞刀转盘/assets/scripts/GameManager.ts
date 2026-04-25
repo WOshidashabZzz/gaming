@@ -407,9 +407,10 @@ export class GameManager extends Component {
     widget.right = 0;
 
     const sp = bg.getComponent(Sprite) ?? bg.addComponent(Sprite);
+    sp.sizeMode = Sprite.SizeMode.CUSTOM;
     sp.color = new Color(255, 255, 255, 255);
 
-    resources.load('bg/bg_game/spriteFrame', SpriteFrame, (err, sf) => {
+    resources.load('bg/bg_game_small/spriteFrame', SpriteFrame, (err, sf) => {
       if (err || !sf || !sp.isValid) {
         return;
       }
