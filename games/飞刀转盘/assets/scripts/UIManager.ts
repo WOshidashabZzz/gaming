@@ -144,14 +144,19 @@ export class UIManager extends Component {
 
   private ensureRuntimeUI(): void {
     const topY = this.getTopHudY();
-    this.ensureHudDecor(topY);
+    const { leftX, rightX } = this.getHudXPositions();
+    this.ensureHudDecor(topY, leftX, rightX);
 
     if (!this.levelLabel) {
-      this.levelLabel = this.ensureTopLabel('LevelLabel', new Vec3(-220, topY, 0), 34, HorizontalTextAlignment.CENTER);
+      this.levelLabel = this.ensureTopLabel('LevelLabel', new Vec3(leftX, topY, 0), 34, HorizontalTextAlignment.CENTER);
+    } else {
+      this.levelLabel.node.setPosition(leftX, topY, 0);
     }
 
     if (!this.remainLabel) {
-      this.remainLabel = this.ensureTopLabel('RemainLabel', new Vec3(220, topY, 0), 34, HorizontalTextAlignment.CENTER);
+      this.remainLabel = this.ensureTopLabel('RemainLabel', new Vec3(rightX, topY, 0), 34, HorizontalTextAlignment.CENTER);
+    } else {
+      this.remainLabel.node.setPosition(rightX, topY, 0);
     }
 
     this.startPanel = this.startPanel ?? this.ensurePanel('StartPanel', '飞箭射月球', '开始挑战', 'StartButton', new Vec3(0, 0, 0));
@@ -261,7 +266,7 @@ export class UIManager extends Component {
     this._loadingPercentLabel = percentLabel;
   }
 
-  private ensureHudDecor(topY: number): void {
+  private ensureHudDecor(topY: number, leftX: number, rightX: number): void {
     let hud = this.node.getChildByName('TopHUD');
     if (!hud) {
       hud = new Node('TopHUD');
@@ -270,30 +275,34 @@ export class UIManager extends Component {
     hud.setPosition(0, topY, 0);
 
     const hudUI = hud.getComponent(UITransform) ?? hud.addComponent(UITransform);
-    hudUI.setContentSize(740, 112);
+    const rootUI = this.node.getComponent(UITransform);
+    const rootWidth = rootUI ? rootUI.width : 1170;
+    const hudWidth = Math.max(740, rootWidth - 56);
+    hudUI.setContentSize(hudWidth, 112);
 
     const g = hud.getComponent(Graphics) ?? hud.addComponent(Graphics);
     g.clear();
 
+    const left = -hudWidth * 0.5;
     g.fillColor = new Color(0, 0, 0, 70);
-    g.roundRect(-370 + 6, -56 - 6, 740, 112, 24);
+    g.roundRect(left + 6, -62, hudWidth, 112, 24);
     g.fill();
 
     g.fillColor = new Color(12, 18, 34, 190);
-    g.roundRect(-370, -56, 740, 112, 24);
+    g.roundRect(left, -56, hudWidth, 112, 24);
     g.fill();
 
     g.fillColor = new Color(62, 86, 150, 60);
-    g.roundRect(-356, -10, 712, 50, 18);
+    g.roundRect(left + 14, -10, hudWidth - 28, 50, 18);
     g.fill();
 
     g.strokeColor = new Color(120, 160, 235, 140);
     g.lineWidth = 1.8;
-    g.roundRect(-370, -56, 740, 112, 24);
+    g.roundRect(left, -56, hudWidth, 112, 24);
     g.stroke();
 
-    this.drawHudChip(g, -220, 0);
-    this.drawHudChip(g, 220, 0);
+    this.drawHudChip(g, leftX, 0);
+    this.drawHudChip(g, rightX, 0);
 
     hud.setSiblingIndex(Math.max(1, this.node.children.length - 1));
   }
@@ -507,9 +516,10 @@ export class UIManager extends Component {
     widget.right = 0;
 
     const sp = bgNode.getComponent(Sprite) ?? bgNode.addComponent(Sprite);
+    sp.sizeMode = Sprite.SizeMode.CUSTOM;
     sp.color = new Color(255, 255, 255, 188);
 
-    resources.load('bg/bg_loading/spriteFrame', SpriteFrame, (err, sf) => {
+    resources.load('bg/bg_loading_small/spriteFrame', SpriteFrame, (err, sf) => {
       if (err || !sf || !sp.isValid) {
         return;
       }
@@ -520,6 +530,18 @@ export class UIManager extends Component {
   private getTopHudY(): number {
     const ui = this.node.getComponent(UITransform);
     const h = ui ? ui.height : 1280;
-    return h * 0.5 - 74;
+    return h * 0.5 - 156;
+  }
+
+  private getHudXPositions(): { leftX: number; rightX: number } {
+    const ui = this.node.getComponent(UITransform);
+    const w = ui ? ui.width : 1170;
+    const half = w * 0.5;
+    const chipHalfWidth = 154;
+    const sideInset = 20;
+    return {
+      leftX: -half + chipHalfWidth + sideInset,
+      rightX: half - chipHalfWidth - sideInset,
+    };
   }
 }
