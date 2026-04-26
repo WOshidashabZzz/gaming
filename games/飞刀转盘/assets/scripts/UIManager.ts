@@ -144,22 +144,26 @@ export class UIManager extends Component {
 
   private ensureRuntimeUI(): void {
     const topY = this.getTopHudY();
-    const { leftX, rightX } = this.getHudXPositions();
-    this.ensureHudDecor(topY, leftX, rightX);
+    const { levelX, remainX } = this.getHudXPositions();
+    const levelChipWidth = 180;
+    const remainChipWidth = 260;
+    this.ensureHudDecor(topY, levelX, remainX, levelChipWidth, remainChipWidth);
 
     if (!this.levelLabel) {
-      this.levelLabel = this.ensureTopLabel('LevelLabel', new Vec3(leftX, topY, 0), 34, HorizontalTextAlignment.CENTER);
+      this.levelLabel = this.ensureTopLabel('LevelLabel', new Vec3(levelX, topY, 0), 34, HorizontalTextAlignment.CENTER, levelChipWidth);
     } else {
-      this.levelLabel.node.setPosition(leftX, topY, 0);
+      this.levelLabel.node.setPosition(levelX, topY, 0);
+      this.levelLabel.node.getComponent(UITransform)?.setContentSize(levelChipWidth, 64);
     }
 
     if (!this.remainLabel) {
-      this.remainLabel = this.ensureTopLabel('RemainLabel', new Vec3(rightX, topY, 0), 34, HorizontalTextAlignment.CENTER);
+      this.remainLabel = this.ensureTopLabel('RemainLabel', new Vec3(remainX, topY, 0), 34, HorizontalTextAlignment.CENTER, remainChipWidth);
     } else {
-      this.remainLabel.node.setPosition(rightX, topY, 0);
+      this.remainLabel.node.setPosition(remainX, topY, 0);
+      this.remainLabel.node.getComponent(UITransform)?.setContentSize(remainChipWidth, 64);
     }
 
-    this.startPanel = this.startPanel ?? this.ensurePanel('StartPanel', '飞箭射月球', '开始挑战', 'StartButton', new Vec3(0, 0, 0));
+    this.startPanel = this.startPanel ?? this.ensurePanel('StartPanel', '飞箭月影', '开始挑战', 'StartButton', new Vec3(0, 0, 0));
     this.losePanel = this.losePanel ?? this.ensurePanel('LosePanel', '挑战失败', '重新开始', 'RestartButton', new Vec3(0, 0, 0));
     this.winPanel = this.winPanel ?? this.ensurePanel('WinPanel', '通关成功', '下一关', 'NextButton', new Vec3(0, 0, 0));
     this.ensureLoadingPanel();
@@ -190,7 +194,7 @@ export class UIManager extends Component {
     const titleUI = title.getComponent(UITransform) ?? title.addComponent(UITransform);
     titleUI.setContentSize(560, 90);
     const titleLabel = title.getComponent(Label) ?? title.addComponent(Label);
-    titleLabel.string = '飞箭射月球';
+    titleLabel.string = '飞箭月影';
     titleLabel.fontSize = 62;
     titleLabel.lineHeight = 70;
     titleLabel.horizontalAlign = HorizontalTextAlignment.CENTER;
@@ -266,7 +270,7 @@ export class UIManager extends Component {
     this._loadingPercentLabel = percentLabel;
   }
 
-  private ensureHudDecor(topY: number, leftX: number, rightX: number): void {
+  private ensureHudDecor(topY: number, levelX: number, remainX: number, levelChipWidth: number, remainChipWidth: number): void {
     let hud = this.node.getChildByName('TopHUD');
     if (!hud) {
       hud = new Node('TopHUD');
@@ -283,46 +287,31 @@ export class UIManager extends Component {
     const g = hud.getComponent(Graphics) ?? hud.addComponent(Graphics);
     g.clear();
 
-    const left = -hudWidth * 0.5;
-    g.fillColor = new Color(0, 0, 0, 70);
-    g.roundRect(left + 6, -62, hudWidth, 112, 24);
-    g.fill();
-
-    g.fillColor = new Color(12, 18, 34, 190);
-    g.roundRect(left, -56, hudWidth, 112, 24);
-    g.fill();
-
-    g.fillColor = new Color(62, 86, 150, 60);
-    g.roundRect(left + 14, -10, hudWidth - 28, 50, 18);
-    g.fill();
-
-    g.strokeColor = new Color(120, 160, 235, 140);
-    g.lineWidth = 1.8;
-    g.roundRect(left, -56, hudWidth, 112, 24);
-    g.stroke();
-
-    this.drawHudChip(g, leftX, 0);
-    this.drawHudChip(g, rightX, 0);
+    this.drawHudChip(g, levelX, 0, levelChipWidth);
+    this.drawHudChip(g, remainX, 0, remainChipWidth);
 
     hud.setSiblingIndex(Math.max(1, this.node.children.length - 1));
   }
 
-  private drawHudChip(g: Graphics, x: number, y: number): void {
+  private drawHudChip(g: Graphics, x: number, y: number, width: number): void {
+    const halfWidth = width * 0.5;
+    const innerInset = 8;
+
     g.fillColor = new Color(0, 0, 0, 65);
-    g.roundRect(x - 154 + 4, y - 34 - 4, 308, 68, 18);
+    g.roundRect(x - halfWidth + 4, y - 34 - 4, width, 68, 18);
     g.fill();
 
     g.fillColor = new Color(25, 34, 58, 220);
-    g.roundRect(x - 154, y - 34, 308, 68, 18);
+    g.roundRect(x - halfWidth, y - 34, width, 68, 18);
     g.fill();
 
     g.fillColor = new Color(65, 94, 164, 65);
-    g.roundRect(x - 146, y - 2, 292, 30, 12);
+    g.roundRect(x - halfWidth + innerInset, y - 2, width - innerInset * 2, 30, 12);
     g.fill();
 
     g.strokeColor = new Color(143, 182, 255, 145);
     g.lineWidth = 1.5;
-    g.roundRect(x - 154, y - 34, 308, 68, 18);
+    g.roundRect(x - halfWidth, y - 34, width, 68, 18);
     g.stroke();
   }
 
@@ -348,7 +337,7 @@ export class UIManager extends Component {
     });
   }
 
-  private ensureTopLabel(name: string, pos: Vec3, fontSize: number, align: HorizontalTextAlignment): Label {
+  private ensureTopLabel(name: string, pos: Vec3, fontSize: number, align: HorizontalTextAlignment, width = 300): Label {
     let node = this.node.getChildByName(name);
     if (!node) {
       node = new Node(name);
@@ -357,7 +346,7 @@ export class UIManager extends Component {
     node.setPosition(pos);
 
     const ui = node.getComponent(UITransform) ?? node.addComponent(UITransform);
-    ui.setContentSize(300, 64);
+    ui.setContentSize(width, 64);
 
     const label = node.getComponent(Label) ?? node.addComponent(Label);
     label.fontSize = fontSize;
@@ -530,18 +519,18 @@ export class UIManager extends Component {
   private getTopHudY(): number {
     const ui = this.node.getComponent(UITransform);
     const h = ui ? ui.height : 1280;
-    return h * 0.5 - 156;
+    return h * 0.5 - 208;
   }
 
-  private getHudXPositions(): { leftX: number; rightX: number } {
+  private getHudXPositions(): { levelX: number; remainX: number } {
     const ui = this.node.getComponent(UITransform);
     const w = ui ? ui.width : 1170;
     const half = w * 0.5;
-    const chipHalfWidth = 154;
+    const levelChipHalfWidth = 90;
     const sideInset = 20;
     return {
-      leftX: -half + chipHalfWidth + sideInset,
-      rightX: half - chipHalfWidth - sideInset,
+      levelX: -half + levelChipHalfWidth + sideInset,
+      remainX: 0,
     };
   }
 }

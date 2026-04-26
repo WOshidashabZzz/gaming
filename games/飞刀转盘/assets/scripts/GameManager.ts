@@ -61,6 +61,8 @@ export class GameManager extends Component {
   private _reverseInterval = 0;
   private _reverseElapsed = 0;
   private _bootReady = false;
+  private _debugTapCount = 0;
+  private _debugTapStartedAt = 0;
 
   protected onLoad(): void {
     this.ensureRuntimeNodes();
@@ -168,6 +170,10 @@ export class GameManager extends Component {
   }
 
   private onTouchStart(_event: EventTouch): void {
+    if (this.tryHandleDebugCompleteGesture(_event)) {
+      return;
+    }
+
     if (this._state !== GameState.Playing) {
       return;
     }
@@ -245,7 +251,7 @@ export class GameManager extends Component {
     if (hasNext) {
       this.uiManager.setWinPanelContent('通关成功', '下一关', true);
     } else {
-      this.uiManager.setWinPanelContent('全部关卡完成', '重新开始', true);
+      this.uiManager.setWinPanelContent('恭喜你顺利通关！', '重新开始', true);
     }
     this.uiManager.showWinPanel();
   }
@@ -341,7 +347,7 @@ export class GameManager extends Component {
 
     if (!this.launchPoint) {
       const found = this.node.getChildByName('LaunchPoint');
-      this.launchPoint = found ?? this.createNode('LaunchPoint', this.node, new Vec3(0, -size.height * 0.36, 0));
+      this.launchPoint = found ?? this.createNode('LaunchPoint', this.node, new Vec3(0, -size.height * 0.32, 0));
     }
 
     this.ensureLaunchMarker();
@@ -575,8 +581,41 @@ export class GameManager extends Component {
     this.turntable.setRotateEnabled(false);
     this.uiManager.setLevel(LevelConfig.totalLevels());
     this.uiManager.setRemaining(0);
-    this.uiManager.setWinPanelContent('全部关卡完成', '重新开始', true);
+    this.uiManager.setWinPanelContent('恭喜你顺利通关！', '重新开始', true);
     this.uiManager.showWinPanel();
+  }
+
+  private tryHandleDebugCompleteGesture(event: EventTouch): boolean {
+    if (!this._bootReady || !this.uiManager) {
+      return false;
+    }
+
+    const ui = this.node.getComponent(UITransform);
+    if (!ui) {
+      return false;
+    }
+
+    const touch = event.getUILocation();
+    const topY = ui.height - 260;
+    const inDebugHotspot = touch.x <= 220 && touch.y >= topY;
+    if (!inDebugHotspot) {
+      return false;
+    }
+
+    const now = director.getTotalTime() / 1000;
+    if (now - this._debugTapStartedAt > 2) {
+      this._debugTapStartedAt = now;
+      this._debugTapCount = 0;
+    }
+
+    this._debugTapCount += 1;
+    if (this._debugTapCount >= 5) {
+      this._debugTapCount = 0;
+      this.enterGameCompleted();
+      return true;
+    }
+
+    return true;
   }
 
   private async preloadCriticalAssets(): Promise<void> {
@@ -584,8 +623,7 @@ export class GameManager extends Component {
       return;
     }
 
-    await this.preloadDir('bg', 0, 0.7);
-    await this.preloadDir('branding', 0.7, 0.3);
+    await this.preloadDir('bg', 0, 1);
 
     this.uiManager.showLoading(1);
     this._bootReady = true;

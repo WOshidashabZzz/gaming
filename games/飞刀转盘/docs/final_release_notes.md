@@ -7,16 +7,16 @@
 - 玩法完整链路：开始、失败重开、通关下一关、全关完成后重新开始。
 
 ## 上架素材位置
-- 小游戏图标（主用）：`assets/resources/branding/app_icon.png`
-- 小游戏图标（备选）：`assets/resources/branding/app_icon_alt.png`
-- 分享封面：`assets/resources/branding/share_cover.png`
+- 小游戏图标（主用）：`docs/branding_assets/app_icon.png`
+- 小游戏图标（备选）：`docs/branding_assets/app_icon_alt.png`
+- 分享封面：`docs/branding_assets/share_cover.png`
 
 ## 资源建议
 - 图标建议导出为 512x512/1024x1024 两套。
 - 分享图建议再导出 1:1 与 5:4 两套，便于不同分享入口裁切。
 
 ## 你在微信后台需要配置
-- 名称：飞箭射月球
+- 名称：飞箭月影
 - 类目与标签：休闲、益智、闯关
 - 隐私政策与用户协议链接
 - 客服联系方式
