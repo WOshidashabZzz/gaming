@@ -1,24 +1,41 @@
-﻿export interface LevelData {
+export interface SpeedPulseData {
+  min: number;
+  max: number;
+  period: number;
+}
+
+export interface LevelData {
   knives: number;
   speed: number;
   dir: 1 | -1;
   initialKnifeAngles?: number[];
   reverseInterval?: number;
+  reverseIntervalRange?: [number, number];
+  reverseWarnDuration?: number;
+  speedPulse?: SpeedPulseData;
 }
 
 const LEVELS: LevelData[] = [
-  // 第一关：保持不变
   { knives: 5, speed: 120, dir: 1 },
-  // 第二关：增加刀数
   { knives: 7, speed: 120, dir: 1 },
-  // 第三关：增加转盘转速
-  { knives: 7, speed: 170, dir: 1 },
-  // 第四关：开局多两把飞刀（障碍刀）
+  { knives: 7, speed: 160, dir: 1, speedPulse: { min: 140, max: 180, period: 5.5 } },
   { knives: 7, speed: 170, dir: 1, initialKnifeAngles: [35, 215] },
-  // 第五关：在第四关基础上再加两把障碍刀（共四把）
-  { knives: 7, speed: 170, dir: 1, initialKnifeAngles: [35, 125, 215, 305] },
-  // 第六关：在第五关基础上增加定时反转（每5秒）
-  { knives: 7, speed: 170, dir: 1, initialKnifeAngles: [35, 125, 215, 305], reverseInterval: 5 },
+  {
+    knives: 7,
+    speed: 170,
+    dir: 1,
+    initialKnifeAngles: [35, 125, 215, 305],
+    speedPulse: { min: 140, max: 180, period: 6.5 },
+  },
+  {
+    knives: 7,
+    speed: 170,
+    dir: 1,
+    initialKnifeAngles: [35, 125, 215, 305],
+    reverseIntervalRange: [3, 6],
+    reverseWarnDuration: 0.5,
+    speedPulse: { min: 140, max: 180, period: 5 },
+  },
 ];
 
 export class LevelConfig {

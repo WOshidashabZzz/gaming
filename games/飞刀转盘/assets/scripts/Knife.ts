@@ -1,4 +1,7 @@
 ﻿import { _decorator, Color, Component, Graphics, Node, Tween, tween, UITransform, Vec3 } from 'cc';
+import { Sprite, SpriteFrame, UIOpacity, resources } from 'cc';
+import { WesternSkin } from './SkinConfig';
+
 const { ccclass, property } = _decorator;
 
 @ccclass('Knife')
@@ -8,6 +11,10 @@ export class Knife extends Component {
 
   private _isFlying = false;
   private _targetY = 0;
+  private _dangerWarning = false;
+  private _dangerTime = 0;
+  private _opacity: UIOpacity | null = null;
+  private _knifeSprite: Sprite | null = null;
 
   public onReachTarget: ((knife: Knife) => void) | null = null;
 
@@ -38,6 +45,7 @@ export class Knife extends Component {
 
   public playFailDrop(): void {
     this._isFlying = false;
+    this.setDangerWarning(false);
 
     Tween.stopAllByTarget(this.node);
     const side = Math.random() > 0.5 ? 1 : -1;
@@ -49,13 +57,29 @@ export class Knife extends Component {
       .start();
   }
 
+  public setDangerWarning(enabled: boolean): void {
+    if (this._dangerWarning === enabled) {
+      return;
+    }
+
+    this._dangerWarning = enabled;
+    this._dangerTime = 0;
+
+    if (!enabled && this._opacity) {
+      this._opacity.opacity = 255;
+    }
+  }
+
   protected update(dt: number): void {
+    const scaledDt = dt * this.getFallbackTimeScale();
+    this.updateDangerWarning(scaledDt);
+
     if (!this._isFlying) {
       return;
     }
 
     const pos = this.node.worldPosition;
-    const nextY = pos.y + this.flySpeed * dt;
+    const nextY = pos.y + this.flySpeed * scaledDt;
 
     if (nextY >= this._targetY) {
       this.node.setWorldPosition(pos.x, this._targetY, pos.z);
@@ -89,9 +113,59 @@ export class Knife extends Component {
   private ensureVisual(): void {
     const ui = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
     ui.setContentSize(36, 134);
+    ui.setAnchorPoint(0.5, 0.18);
+
+    this._opacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
+    this._opacity.opacity = 255;
 
     const g = this.node.getComponent(Graphics) ?? this.node.addComponent(Graphics);
     this.drawArrow(g);
+    this.ensureKnifeSprite(g);
+  }
+
+  private ensureKnifeSprite(fallbackGraphics: Graphics): void {
+    let spriteNode = this.node.getChildByName('KnifeSprite');
+    if (!spriteNode) {
+      spriteNode = new Node('KnifeSprite');
+      this.node.addChild(spriteNode);
+    }
+    spriteNode.setPosition(0, 0, 0);
+    const ui = spriteNode.getComponent(UITransform) ?? spriteNode.addComponent(UITransform);
+    ui.setContentSize(48, 132);
+    ui.setAnchorPoint(0.5, 0.18);
+
+    const sprite = spriteNode.getComponent(Sprite) ?? spriteNode.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    this._knifeSprite = sprite;
+
+    resources.load(WesternSkin.knifeSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !sprite.isValid) {
+        return;
+      }
+      sprite.spriteFrame = sf;
+      fallbackGraphics.clear();
+    });
+  }
+
+  private updateDangerWarning(dt: number): void {
+    if (!this._opacity || this._isFlying) {
+      return;
+    }
+
+    if (!this._dangerWarning) {
+      if (this._opacity.opacity !== 255) {
+        this._opacity.opacity = 255;
+      }
+      return;
+    }
+
+    this._dangerTime += dt;
+    const wave = (Math.sin(this._dangerTime * 12) + 1) * 0.5;
+    this._opacity.opacity = 128 + Math.floor(wave * 127);
+  }
+
+  private getFallbackTimeScale(): number {
+    return (globalThis as unknown as { __flyKnifeTimeScale?: number }).__flyKnifeTimeScale ?? 1;
   }
 
   private drawArrow(g: Graphics): void {

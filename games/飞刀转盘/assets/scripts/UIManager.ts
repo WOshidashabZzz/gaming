@@ -9,11 +9,15 @@
   Node,
   Sprite,
   SpriteFrame,
+  Tween,
+  UIOpacity,
   UITransform,
   Vec3,
   Widget,
   resources,
+  tween,
 } from 'cc';
+import { WesternSkin } from './SkinConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -37,6 +41,8 @@ export class UIManager extends Component {
   private _loadingPanel: Node | null = null;
   private _loadingBarFill: Node | null = null;
   private _loadingPercentLabel: Label | null = null;
+  private _comboLabel: Label | null = null;
+  private _comboOpacity: UIOpacity | null = null;
 
   private _onStart: (() => void) | null = null;
   private _onRestart: (() => void) | null = null;
@@ -59,8 +65,33 @@ export class UIManager extends Component {
 
   public setRemaining(remaining: number): void {
     if (this.remainLabel) {
-      this.remainLabel.string = `剩余飞箭 ${remaining}`;
+      this.remainLabel.string = `剩余飞刀 ${remaining}`;
     }
+  }
+
+  public showCombo(comboCount: number): void {
+    this.ensureComboLabel();
+
+    if (!this._comboLabel || !this._comboOpacity) {
+      return;
+    }
+
+    this._comboLabel.string = `Combo x${comboCount}`;
+    this._comboOpacity.opacity = 255;
+    this._comboLabel.node.setScale(0.92, 0.92, 1);
+
+    Tween.stopAllByTarget(this._comboOpacity);
+    Tween.stopAllByTarget(this._comboLabel.node);
+
+    tween(this._comboLabel.node)
+      .to(0.08, { scale: new Vec3(1.08, 1.08, 1) })
+      .to(0.08, { scale: new Vec3(1, 1, 1) })
+      .start();
+
+    tween(this._comboOpacity)
+      .delay(0.5)
+      .to(0.2, { opacity: 0 })
+      .start();
   }
 
   public showLoading(progress: number): void {
@@ -163,9 +194,11 @@ export class UIManager extends Component {
       this.remainLabel.node.getComponent(UITransform)?.setContentSize(remainChipWidth, 64);
     }
 
-    this.startPanel = this.startPanel ?? this.ensurePanel('StartPanel', '飞箭月影', '开始挑战', 'StartButton', new Vec3(0, 0, 0));
-    this.losePanel = this.losePanel ?? this.ensurePanel('LosePanel', '挑战失败', '重新开始', 'RestartButton', new Vec3(0, 0, 0));
-    this.winPanel = this.winPanel ?? this.ensurePanel('WinPanel', '通关成功', '下一关', 'NextButton', new Vec3(0, 0, 0));
+    this.ensureComboLabel();
+
+    this.startPanel = this.startPanel ?? this.ensurePanel('StartPanel', '西部飞刀', '开始挑战', 'StartButton', new Vec3(0, 0, 0));
+    this.losePanel = this.losePanel ?? this.ensurePanel('LosePanel', '撞刀了！', '再来一把', 'RestartButton', new Vec3(0, 0, 0));
+    this.winPanel = this.winPanel ?? this.ensurePanel('WinPanel', '完美命中！', '下一关', 'NextButton', new Vec3(0, 0, 0));
     this.ensureLoadingPanel();
     this.applyStartPanelBackground();
   }
@@ -194,13 +227,13 @@ export class UIManager extends Component {
     const titleUI = title.getComponent(UITransform) ?? title.addComponent(UITransform);
     titleUI.setContentSize(560, 90);
     const titleLabel = title.getComponent(Label) ?? title.addComponent(Label);
-    titleLabel.string = '飞箭月影';
+    titleLabel.string = '西部飞刀';
     titleLabel.fontSize = 62;
     titleLabel.lineHeight = 70;
     titleLabel.horizontalAlign = HorizontalTextAlignment.CENTER;
     titleLabel.color = new Color(255, 238, 180, 255);
     const titleOutline = title.getComponent(LabelOutline) ?? title.addComponent(LabelOutline);
-    titleOutline.color = new Color(20, 20, 35, 220);
+    titleOutline.color = new Color(59, 30, 16, 235);
     titleOutline.width = 2;
 
     let sub = panel.getChildByName('SubTitle');
@@ -228,13 +261,21 @@ export class UIManager extends Component {
     trackUI.setContentSize(500, 32);
     const trackG = track.getComponent(Graphics) ?? track.addComponent(Graphics);
     trackG.clear();
-    trackG.fillColor = new Color(26, 34, 58, 220);
+    trackG.fillColor = new Color(54, 31, 20, 230);
     trackG.roundRect(-250, -16, 500, 32, 16);
     trackG.fill();
-    trackG.strokeColor = new Color(141, 177, 255, 180);
+    trackG.strokeColor = new Color(152, 91, 44, 210);
     trackG.lineWidth = 1.2;
     trackG.roundRect(-250, -16, 500, 32, 16);
     trackG.stroke();
+    const trackSprite = track.getComponent(Sprite) ?? track.addComponent(Sprite);
+    trackSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.progressBackgroundSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !trackSprite.isValid) {
+        return;
+      }
+      trackSprite.spriteFrame = sf;
+    });
 
     let fill = panel.getChildByName('LoadingFill');
     if (!fill) {
@@ -246,9 +287,17 @@ export class UIManager extends Component {
     fillUI.setContentSize(0, 32);
     const fillG = fill.getComponent(Graphics) ?? fill.addComponent(Graphics);
     fillG.clear();
-    fillG.fillColor = new Color(89, 155, 255, 255);
+    fillG.fillColor = new Color(219, 74, 45, 255);
     fillG.roundRect(0, -16, 500, 32, 16);
     fillG.fill();
+    const fillSprite = fill.getComponent(Sprite) ?? fill.addComponent(Sprite);
+    fillSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.progressFillSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !fillSprite.isValid) {
+        return;
+      }
+      fillSprite.spriteFrame = sf;
+    });
 
     let percent = panel.getChildByName('LoadingPercent');
     if (!percent) {
@@ -301,16 +350,23 @@ export class UIManager extends Component {
     g.roundRect(x - halfWidth + 4, y - 34 - 4, width, 68, 18);
     g.fill();
 
-    g.fillColor = new Color(25, 34, 58, 220);
+    g.fillColor = new Color(82, 47, 26, 232);
     g.roundRect(x - halfWidth, y - 34, width, 68, 18);
     g.fill();
 
-    g.fillColor = new Color(65, 94, 164, 65);
+    g.fillColor = new Color(164, 92, 42, 105);
     g.roundRect(x - halfWidth + innerInset, y - 2, width - innerInset * 2, 30, 12);
     g.fill();
 
-    g.strokeColor = new Color(143, 182, 255, 145);
-    g.lineWidth = 1.5;
+    g.fillColor = new Color(38, 34, 31, 255);
+    g.circle(x - halfWidth + 18, y - 17, 5);
+    g.circle(x + halfWidth - 18, y - 17, 5);
+    g.circle(x - halfWidth + 18, y + 17, 5);
+    g.circle(x + halfWidth - 18, y + 17, 5);
+    g.fill();
+
+    g.strokeColor = new Color(238, 166, 86, 170);
+    g.lineWidth = 2;
     g.roundRect(x - halfWidth, y - 34, width, 68, 18);
     g.stroke();
   }
@@ -352,13 +408,66 @@ export class UIManager extends Component {
     label.fontSize = fontSize;
     label.lineHeight = fontSize + 10;
     label.horizontalAlign = align;
-    label.color = new Color(245, 250, 255, 255);
+    label.color = new Color(255, 236, 170, 255);
 
     const outline = node.getComponent(LabelOutline) ?? node.addComponent(LabelOutline);
-    outline.color = new Color(15, 24, 44, 220);
+    outline.color = new Color(49, 25, 15, 235);
     outline.width = 2;
 
     return label;
+  }
+
+  private ensureComboLabel(): void {
+    let node = this.node.getChildByName('ComboLabel');
+    if (!node) {
+      node = new Node('ComboLabel');
+      this.node.addChild(node);
+    }
+
+    const uiRoot = this.node.getComponent(UITransform);
+    const topY = uiRoot ? uiRoot.height * 0.5 - 330 : 310;
+    node.setPosition(0, topY, 0);
+    node.setSiblingIndex(Math.max(1, this.node.children.length - 1));
+
+    const ui = node.getComponent(UITransform) ?? node.addComponent(UITransform);
+    ui.setContentSize(420, 86);
+    this.ensureComboBackground(node);
+
+    const label = node.getComponent(Label) ?? node.addComponent(Label);
+    label.string = '';
+    label.fontSize = 44;
+    label.lineHeight = 56;
+    label.horizontalAlign = HorizontalTextAlignment.CENTER;
+    label.color = new Color(255, 245, 170, 255);
+
+    const outline = node.getComponent(LabelOutline) ?? node.addComponent(LabelOutline);
+    outline.color = new Color(60, 34, 15, 230);
+    outline.width = 3;
+
+    const opacity = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+    opacity.opacity = 0;
+
+    this._comboLabel = label;
+    this._comboOpacity = opacity;
+  }
+
+  private ensureComboBackground(node: Node): void {
+    let bgNode = node.getChildByName('ComboBackground');
+    if (!bgNode) {
+      bgNode = new Node('ComboBackground');
+      node.insertChild(bgNode, 0);
+    }
+    bgNode.setPosition(0, 0, 0);
+    const ui = bgNode.getComponent(UITransform) ?? bgNode.addComponent(UITransform);
+    ui.setContentSize(420, 110);
+    const sprite = bgNode.getComponent(Sprite) ?? bgNode.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.comboBackgroundSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !sprite.isValid) {
+        return;
+      }
+      sprite.spriteFrame = sf;
+    });
   }
 
   private ensurePanel(
@@ -380,6 +489,7 @@ export class UIManager extends Component {
 
     const panelBg = panel.getComponent(Graphics) ?? panel.addComponent(Graphics);
     this.drawPanel(panelBg, 640, 430);
+    this.ensurePanelSprite(panel, 640, 430);
 
     let titleNode = panel.getChildByName('Title');
     if (!titleNode) {
@@ -394,9 +504,9 @@ export class UIManager extends Component {
     titleLabel.fontSize = 56;
     titleLabel.lineHeight = 64;
     titleLabel.horizontalAlign = HorizontalTextAlignment.CENTER;
-    titleLabel.color = new Color(255, 248, 220, 255);
+    titleLabel.color = new Color(255, 230, 160, 255);
     const titleOutline = titleNode.getComponent(LabelOutline) ?? titleNode.addComponent(LabelOutline);
-    titleOutline.color = new Color(20, 20, 35, 220);
+    titleOutline.color = new Color(59, 30, 16, 235);
     titleOutline.width = 2;
 
     let btn = panel.getChildByName(buttonNodeName);
@@ -409,6 +519,7 @@ export class UIManager extends Component {
     btnUI.setContentSize(320, 102);
     const btnBg = btn.getComponent(Graphics) ?? btn.addComponent(Graphics);
     this.drawButton(btnBg, 320, 102);
+    this.ensureButtonSprite(btn, 320, 102);
 
     let btnLabelNode = btn.getChildByName('Label');
     if (!btnLabelNode) {
@@ -425,10 +536,48 @@ export class UIManager extends Component {
     btnLabel.horizontalAlign = HorizontalTextAlignment.CENTER;
     btnLabel.color = new Color(255, 255, 255, 255);
     const btnOutline = btnLabelNode.getComponent(LabelOutline) ?? btnLabelNode.addComponent(LabelOutline);
-    btnOutline.color = new Color(27, 55, 120, 220);
+    btnOutline.color = new Color(70, 36, 20, 235);
     btnOutline.width = 2;
 
     return panel;
+  }
+
+  private ensurePanelSprite(panel: Node, width: number, height: number): void {
+    let spriteNode = panel.getChildByName('PanelSprite');
+    if (!spriteNode) {
+      spriteNode = new Node('PanelSprite');
+      panel.insertChild(spriteNode, 0);
+    }
+    spriteNode.setPosition(0, 0, 0);
+    const ui = spriteNode.getComponent(UITransform) ?? spriteNode.addComponent(UITransform);
+    ui.setContentSize(width, height);
+    const sprite = spriteNode.getComponent(Sprite) ?? spriteNode.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.panelSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !sprite.isValid) {
+        return;
+      }
+      sprite.spriteFrame = sf;
+    });
+  }
+
+  private ensureButtonSprite(button: Node, width: number, height: number): void {
+    let spriteNode = button.getChildByName('ButtonSprite');
+    if (!spriteNode) {
+      spriteNode = new Node('ButtonSprite');
+      button.insertChild(spriteNode, 0);
+    }
+    spriteNode.setPosition(0, 0, 0);
+    const ui = spriteNode.getComponent(UITransform) ?? spriteNode.addComponent(UITransform);
+    ui.setContentSize(width, height);
+    const sprite = spriteNode.getComponent(Sprite) ?? spriteNode.addComponent(Sprite);
+    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.buttonSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !sprite.isValid) {
+        return;
+      }
+      sprite.spriteFrame = sf;
+    });
   }
 
   private drawPanel(g: Graphics, width: number, height: number): void {
@@ -438,16 +587,31 @@ export class UIManager extends Component {
     g.roundRect(-width * 0.5 + 8, -height * 0.5 - 8, width, height, 28);
     g.fill();
 
-    g.fillColor = new Color(20, 26, 48, 220);
+    g.fillColor = new Color(82, 46, 25, 236);
     g.roundRect(-width * 0.5, -height * 0.5, width, height, 28);
     g.fill();
 
-    g.fillColor = new Color(60, 82, 145, 80);
+    g.fillColor = new Color(158, 89, 42, 105);
     g.roundRect(-width * 0.5 + 12, -height * 0.5 + 12, width - 24, height * 0.48, 20);
     g.fill();
 
-    g.strokeColor = new Color(135, 174, 255, 175);
-    g.lineWidth = 2.1;
+    for (let y = -height * 0.5 + 48; y < height * 0.5 - 36; y += 42) {
+      g.strokeColor = new Color(52, 31, 20, 74);
+      g.lineWidth = 1.4;
+      g.moveTo(-width * 0.5 + 34, y);
+      g.quadraticCurveTo(0, y + 14, width * 0.5 - 34, y - 6);
+      g.stroke();
+    }
+
+    g.fillColor = new Color(43, 38, 34, 255);
+    g.circle(-width * 0.5 + 34, -height * 0.5 + 34, 8);
+    g.circle(width * 0.5 - 34, -height * 0.5 + 34, 8);
+    g.circle(-width * 0.5 + 34, height * 0.5 - 34, 8);
+    g.circle(width * 0.5 - 34, height * 0.5 - 34, 8);
+    g.fill();
+
+    g.strokeColor = new Color(236, 158, 75, 190);
+    g.lineWidth = 2.4;
     g.roundRect(-width * 0.5, -height * 0.5, width, height, 28);
     g.stroke();
   }
@@ -459,15 +623,22 @@ export class UIManager extends Component {
     g.roundRect(-width * 0.5 + 4, -height * 0.5 - 5, width, height, 18);
     g.fill();
 
-    g.fillColor = new Color(30, 72, 160, 255);
+    g.fillColor = new Color(132, 73, 35, 255);
     g.roundRect(-width * 0.5, -height * 0.5, width, height, 18);
     g.fill();
 
-    g.fillColor = new Color(110, 172, 255, 175);
+    g.fillColor = new Color(236, 144, 64, 178);
     g.roundRect(-width * 0.5 + 10, 2, width - 20, height * 0.44, 14);
     g.fill();
 
-    g.strokeColor = new Color(188, 220, 255, 220);
+    g.fillColor = new Color(45, 39, 35, 255);
+    g.circle(-width * 0.5 + 24, -height * 0.5 + 24, 6);
+    g.circle(width * 0.5 - 24, -height * 0.5 + 24, 6);
+    g.circle(-width * 0.5 + 24, height * 0.5 - 24, 6);
+    g.circle(width * 0.5 - 24, height * 0.5 - 24, 6);
+    g.fill();
+
+    g.strokeColor = new Color(255, 210, 145, 220);
     g.lineWidth = 1.8;
     g.roundRect(-width * 0.5, -height * 0.5, width, height, 18);
     g.stroke();
@@ -508,7 +679,7 @@ export class UIManager extends Component {
     sp.sizeMode = Sprite.SizeMode.CUSTOM;
     sp.color = new Color(255, 255, 255, 188);
 
-    resources.load('bg/bg_loading_small/spriteFrame', SpriteFrame, (err, sf) => {
+    resources.load(WesternSkin.loadingBackground, SpriteFrame, (err, sf) => {
       if (err || !sf || !sp.isValid) {
         return;
       }

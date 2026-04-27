@@ -9,6 +9,7 @@
   Sprite,
   SpriteFrame,
   Tween,
+  UIOpacity,
   UITransform,
   Vec3,
   Widget,
@@ -22,6 +23,7 @@
 import { GameState } from './GameTypes';
 import { Knife } from './Knife';
 import { LevelConfig } from './LevelConfig';
+import { WesternSkin } from './SkinConfig';
 import { Turntable } from './Turntable';
 import { UIManager } from './UIManager';
 
@@ -50,6 +52,17 @@ export class GameManager extends Component {
   @property({ tooltip: '角度差小于该阈值时判定碰撞失败（单位：度）' })
   public collisionAngleThreshold = 16;
 
+  @property({ tooltip: '角度差小于该阈值时显示危险提示（单位：度）' })
+  public dangerAngleThreshold = 15;
+
+  @property({ tooltip: '动态转速最低值' })
+  public minSpeed = 140;
+
+  @property({ tooltip: '动态转速最高值' })
+  public maxSpeed = 180;
+
+  public comboCount = 0;
+
   private _state: GameState = GameState.WaitingStart;
   private _remainingKnives = 0;
   private _currentLevelIndex = 0;
@@ -60,6 +73,11 @@ export class GameManager extends Component {
   private _lastShootAt = -99;
   private _reverseInterval = 0;
   private _reverseElapsed = 0;
+  private _reverseIntervalRange: [number, number] | null = null;
+  private _reverseWarnDuration = 0.5;
+  private _reverseWarningActive = false;
+  private _timeScaleEffects = new Map<string, number>();
+  private _timeScaleTokens = new Map<string, number>();
   private _bootReady = false;
   private _debugTapCount = 0;
   private _debugTapStartedAt = 0;
@@ -80,17 +98,28 @@ export class GameManager extends Component {
 
   protected onDestroy(): void {
     input.off(Input.EventType.TOUCH_START, this.onTouchStart, this);
+    this.unschedule(this.finishReverseWarning);
+    this.clearTimeScaleEffects();
   }
 
   protected update(dt: number): void {
-    if (this._state !== GameState.Playing || this._reverseInterval <= 0 || !this.turntable) {
+    if (this._state !== GameState.Playing || !this.turntable) {
+      return;
+    }
+
+    const scaledDt = dt * this.getFallbackTimeScale();
+    this.updateDangerWarnings();
+    this.updateReverseTimer(scaledDt);
+  }
+
+  private updateReverseTimer(dt: number): void {
+    if (this._reverseInterval <= 0 || !this.turntable || this._reverseWarningActive) {
       return;
     }
 
     this._reverseElapsed += dt;
-    while (this._reverseElapsed >= this._reverseInterval) {
-      this._reverseElapsed -= this._reverseInterval;
-      this.turntable.reverseDirection();
+    if (this._reverseElapsed >= this._reverseInterval) {
+      this.startReverseWarning();
     }
   }
 
@@ -110,6 +139,10 @@ export class GameManager extends Component {
     this._currentLevelIndex = levelIndex;
     this._insertedAngles.length = 0;
     this._flyingKnife = null;
+    this.comboCount = 0;
+    this._reverseWarningActive = false;
+    this.unschedule(this.finishReverseWarning);
+    this.clearTimeScaleEffects();
 
     const levelData = LevelConfig.getLevel(this._currentLevelIndex);
     if (!levelData) {
@@ -117,11 +150,14 @@ export class GameManager extends Component {
       return;
     }
     this._remainingKnives = levelData.knives;
-    this._reverseInterval = levelData.reverseInterval ?? 0;
+    this._reverseIntervalRange = levelData.reverseIntervalRange ?? null;
+    this._reverseInterval = this.pickReverseInterval(levelData.reverseInterval ?? 0, this._reverseIntervalRange);
+    this._reverseWarnDuration = levelData.reverseWarnDuration ?? 0.5;
     this._reverseElapsed = 0;
 
     this.turntable.resetTurntable();
     this.turntable.applyLevel(levelData.speed, levelData.dir);
+    this.turntable.setSpeedPulse(levelData.speedPulse?.min ?? this.minSpeed, levelData.speedPulse?.max ?? this.maxSpeed, levelData.speedPulse?.period ?? 5);
     this.turntable.setRotateEnabled(false);
     this.spawnInitialKnives(levelData.initialKnifeAngles ?? []);
 
@@ -224,16 +260,17 @@ export class GameManager extends Component {
     const hitAngle = this.calcHitAngleInTurntableLocal(hitWorldPos);
 
     if (this.isAngleColliding(hitAngle)) {
-      this.handleLose(knife);
+      this.handleLose(knife, hitWorldPos);
       return;
     }
 
     knife.attachToTurntable(this.turntable.node, hitAngle, this.turntable.radius);
-    this.turntable.playHitFeedback();
+    this.handleSuccessfulHit();
 
     this._attachedKnifeNodes.push(knife.node);
     this._insertedAngles.push(hitAngle);
     this._flyingKnife = null;
+    this.updateDangerWarnings();
 
     if (this._remainingKnives <= 0) {
       this.handleWin();
@@ -246,24 +283,68 @@ export class GameManager extends Component {
     }
 
     this._state = GameState.Win;
+    this._reverseWarningActive = false;
+    this.unschedule(this.finishReverseWarning);
     this.turntable.setRotateEnabled(false);
     const hasNext = LevelConfig.hasLevel(this._currentLevelIndex + 1);
     if (hasNext) {
-      this.uiManager.setWinPanelContent('通关成功', '下一关', true);
+      this.uiManager.setWinPanelContent('完美命中！', '下一关', true);
     } else {
-      this.uiManager.setWinPanelContent('恭喜你顺利通关！', '重新开始', true);
+      this.uiManager.setWinPanelContent('完美命中！', '再来一把', true);
     }
     this.uiManager.showWinPanel();
   }
 
-  private handleLose(knife: Knife): void {
+  private handleSuccessfulHit(): void {
+    if (!this.turntable || !this.uiManager) {
+      return;
+    }
+
+    this.comboCount += 1;
+    this.uiManager.showCombo(this.comboCount);
+    this.turntable.playHitFeedback();
+    this.pushTimeScaleEffect('hitStop', 0, 0.08);
+    this.playSfx('hit');
+    this.handleComboMilestone();
+  }
+
+  private handleComboMilestone(): void {
+    if (!this.turntable) {
+      return;
+    }
+
+    if (this.comboCount === 3) {
+      this.turntable.playComboPulse();
+      this.playSfx('combo');
+    }
+
+    if (this.comboCount === 5) {
+      this.pushTimeScaleEffect('comboSlow', 0.8, 0.2);
+      this.shakeScreen(5, 0.2);
+      this.playLightVibration();
+    }
+
+    if (this.comboCount >= 8) {
+      this.turntable.playComboGlow(1);
+    }
+  }
+
+  private handleLose(knife: Knife, hitWorldPos: Vec3): void {
     if (!this.turntable || !this.uiManager) {
       return;
     }
 
     this._state = GameState.Lose;
     this._flyingKnife = null;
+    this.comboCount = 0;
+    this._reverseWarningActive = false;
+    this.unschedule(this.finishReverseWarning);
 
+    this.pushTimeScaleEffect('failStop', 0, 0.1);
+    this.shakeScreen(9, 0.26);
+    this.spawnImpactFlash(hitWorldPos);
+    this.playSfx('fail');
+    this.playLightVibration();
     knife.playFailDrop();
     this.turntable.setRotateEnabled(false);
     this.uiManager.showLosePanel();
@@ -290,6 +371,57 @@ export class GameManager extends Component {
     }
 
     this._attachedKnifeNodes.length = 0;
+  }
+
+  private updateDangerWarnings(): void {
+    const dangerFlags = new Array<boolean>(this._attachedKnifeNodes.length).fill(false);
+
+    for (let i = 0; i < this._insertedAngles.length; i += 1) {
+      for (let j = i + 1; j < this._insertedAngles.length; j += 1) {
+        if (this.minAngleDiff(this._insertedAngles[i], this._insertedAngles[j]) < this.dangerAngleThreshold) {
+          dangerFlags[i] = true;
+          dangerFlags[j] = true;
+        }
+      }
+    }
+
+    for (let i = 0; i < this._attachedKnifeNodes.length; i += 1) {
+      const knife = this._attachedKnifeNodes[i]?.getComponent(Knife);
+      knife?.setDangerWarning(Boolean(dangerFlags[i]));
+    }
+  }
+
+  private startReverseWarning(): void {
+    if (!this.turntable) {
+      return;
+    }
+
+    this._reverseWarningActive = true;
+    this._reverseElapsed = 0;
+    this.turntable.playReverseWarning(this._reverseWarnDuration);
+    this.scheduleOnce(this.finishReverseWarning, this._reverseWarnDuration);
+  }
+
+  private finishReverseWarning(): void {
+    if (this._state !== GameState.Playing || !this.turntable) {
+      this._reverseWarningActive = false;
+      return;
+    }
+
+    this.turntable.reverseDirection();
+    this._reverseWarningActive = false;
+    this._reverseElapsed = 0;
+    this._reverseInterval = this.pickReverseInterval(this._reverseInterval, this._reverseIntervalRange);
+  }
+
+  private pickReverseInterval(fallback: number, range: [number, number] | null): number {
+    if (!range) {
+      return fallback;
+    }
+
+    const min = Math.min(range[0], range[1]);
+    const max = Math.max(range[0], range[1]);
+    return min + Math.random() * (max - min);
   }
 
   private calcHitAngleInTurntableLocal(hitWorldPos: Vec3): number {
@@ -416,7 +548,7 @@ export class GameManager extends Component {
     sp.sizeMode = Sprite.SizeMode.CUSTOM;
     sp.color = new Color(255, 255, 255, 255);
 
-    resources.load('bg/bg_game_small/spriteFrame', SpriteFrame, (err, sf) => {
+    resources.load(WesternSkin.backgroundSprite, SpriteFrame, (err, sf) => {
       if (err || !sf || !sp.isValid) {
         return;
       }
@@ -484,75 +616,57 @@ export class GameManager extends Component {
     const g = marker.getComponent(Graphics) ?? marker.addComponent(Graphics);
     g.clear();
 
-    // 弩臂阴影
-    g.lineWidth = 8;
-    g.strokeColor = new Color(0, 0, 0, 65);
-    g.moveTo(-46, -12);
-    g.quadraticCurveTo(0, 34, 46, -12);
-    g.stroke();
-
-    // 弩臂主体
-    g.lineWidth = 7;
-    g.strokeColor = new Color(154, 98, 56, 255);
-    g.moveTo(-44, -11);
-    g.quadraticCurveTo(0, 33, 44, -11);
-    g.stroke();
-
-    // 弩臂高光
-    g.lineWidth = 2.2;
-    g.strokeColor = new Color(213, 165, 113, 215);
-    g.moveTo(-38, -9);
-    g.quadraticCurveTo(0, 26, 38, -9);
-    g.stroke();
-
-    // 弓弦
-    g.lineWidth = 2.1;
-    g.strokeColor = new Color(230, 230, 230, 220);
-    g.moveTo(-39, -4);
-    g.lineTo(0, 18);
-    g.lineTo(39, -4);
-    g.stroke();
-
-    // 弩身阴影
+    // 西部飞刀发射器兜底图形；贴图加载成功后会清掉它。
     g.fillColor = new Color(0, 0, 0, 72);
-    g.roundRect(-13, -44, 26, 57, 7);
+    g.roundRect(-54, -58, 108, 36, 12);
     g.fill();
 
-    // 弩身主体
-    g.fillColor = new Color(90, 70, 50, 255);
-    g.roundRect(-11, -42, 22, 54, 7);
+    g.fillColor = new Color(104, 62, 35, 255);
+    g.roundRect(-50, -54, 100, 32, 11);
     g.fill();
 
-    // 弩身高光
-    g.fillColor = new Color(145, 115, 84, 145);
-    g.roundRect(-8.5, -35, 6.2, 38, 3);
+    g.fillColor = new Color(154, 88, 42, 255);
+    g.roundRect(-42, -48, 84, 10, 4);
     g.fill();
 
-    // 箭槽
-    g.fillColor = new Color(220, 210, 180, 255);
-    g.roundRect(-3, -13, 6, 34, 2);
+    g.fillColor = new Color(88, 54, 35, 255);
+    g.roundRect(-22, -24, 44, 48, 13);
     g.fill();
 
-    // 箭头
-    g.fillColor = new Color(230, 235, 245, 255);
-    g.moveTo(0, 32);
-    g.lineTo(-8, 20);
-    g.lineTo(8, 20);
+    g.fillColor = new Color(230, 235, 240, 255);
+    g.moveTo(0, 54);
+    g.lineTo(-13, 7);
+    g.lineTo(-6, -12);
+    g.lineTo(6, -12);
+    g.lineTo(13, 7);
     g.close();
     g.fill();
 
-    // 箭头高光
     g.fillColor = new Color(255, 255, 255, 125);
-    g.moveTo(0, 28);
-    g.lineTo(-2.2, 23);
-    g.lineTo(2.2, 23);
+    g.moveTo(0, 45);
+    g.lineTo(-2, -3);
+    g.lineTo(6, -8);
+    g.lineTo(10, 7);
     g.close();
     g.fill();
 
-    // 底部节点
-    g.fillColor = new Color(255, 230, 120, 230);
-    g.circle(0, -48, 8);
-    g.fill();
+    let launcherSpriteNode = marker.getChildByName('LauncherSprite');
+    if (!launcherSpriteNode) {
+      launcherSpriteNode = new Node('LauncherSprite');
+      marker.addChild(launcherSpriteNode);
+    }
+    launcherSpriteNode.setPosition(0, 0, 0);
+    const launcherUI = launcherSpriteNode.getComponent(UITransform) ?? launcherSpriteNode.addComponent(UITransform);
+    launcherUI.setContentSize(170, 170);
+    const launcherSp = launcherSpriteNode.getComponent(Sprite) ?? launcherSpriteNode.addComponent(Sprite);
+    launcherSp.sizeMode = Sprite.SizeMode.CUSTOM;
+    resources.load(WesternSkin.launcherSprite, SpriteFrame, (err, sf) => {
+      if (err || !sf || !launcherSp.isValid) {
+        return;
+      }
+      launcherSp.spriteFrame = sf;
+      g.clear();
+    });
 
     this._launchMarker = marker;
   }
@@ -571,6 +685,140 @@ export class GameManager extends Component {
       .start();
   }
 
+  private pushTimeScaleEffect(key: string, scale: number, duration: number): void {
+    const nextToken = (this._timeScaleTokens.get(key) ?? 0) + 1;
+    this._timeScaleTokens.set(key, nextToken);
+    this._timeScaleEffects.set(key, scale);
+    this.applyTimeScale();
+
+    setTimeout(() => {
+      if (this._timeScaleTokens.get(key) !== nextToken) {
+        return;
+      }
+
+      this._timeScaleEffects.delete(key);
+      this.applyTimeScale();
+    }, duration * 1000);
+  }
+
+  private clearTimeScaleEffects(): void {
+    this._timeScaleEffects.clear();
+    this._timeScaleTokens.clear();
+    this.setTimeScale(1);
+  }
+
+  private applyTimeScale(): void {
+    let scale = 1;
+    for (const value of this._timeScaleEffects.values()) {
+      scale = Math.min(scale, value);
+    }
+
+    this.setTimeScale(scale);
+  }
+
+  private setTimeScale(scale: number): void {
+    const scheduler = (director as unknown as { getScheduler?: () => { setTimeScale?: (value: number) => void } }).getScheduler?.();
+    if (scheduler?.setTimeScale) {
+      scheduler.setTimeScale(scale);
+      this.setFallbackTimeScale(1);
+      return;
+    }
+
+    this.setFallbackTimeScale(scale);
+  }
+
+  private setFallbackTimeScale(scale: number): void {
+    (globalThis as unknown as { __flyKnifeTimeScale?: number }).__flyKnifeTimeScale = scale;
+  }
+
+  private getFallbackTimeScale(): number {
+    return (globalThis as unknown as { __flyKnifeTimeScale?: number }).__flyKnifeTimeScale ?? 1;
+  }
+
+  private shakeScreen(strength: number, duration: number): void {
+    const origin = this.node.position.clone();
+    const step = 0.035;
+    const repeats = Math.max(2, Math.floor(duration / step));
+
+    Tween.stopAllByTarget(this.node);
+    let chain = tween(this.node);
+    for (let i = 0; i < repeats; i += 1) {
+      const offset = new Vec3((Math.random() * 2 - 1) * strength, (Math.random() * 2 - 1) * strength, 0);
+      chain = chain.to(step, { position: origin.clone().add(offset) });
+    }
+
+    chain.to(0.04, { position: origin }).start();
+  }
+
+  private spawnImpactFlash(worldPos: Vec3): void {
+    const node = new Node('ImpactFlash');
+    this.node.addChild(node);
+    node.setWorldPosition(worldPos);
+
+    const ui = node.addComponent(UITransform);
+    ui.setContentSize(92, 92);
+
+    const g = node.addComponent(Graphics);
+    g.fillColor = new Color(255, 255, 255, 235);
+    g.circle(0, 0, 32);
+    g.fill();
+    g.lineWidth = 4;
+    g.strokeColor = new Color(255, 220, 120, 220);
+    g.moveTo(-42, 0);
+    g.lineTo(42, 0);
+    g.moveTo(0, -42);
+    g.lineTo(0, 42);
+    g.stroke();
+
+    const opacity = node.addComponent(UIOpacity);
+    opacity.opacity = 255;
+
+    tween(node)
+      .to(0.16, { scale: new Vec3(1.45, 1.45, 1) })
+      .start();
+    tween(opacity)
+      .to(0.18, { opacity: 0 })
+      .call(() => node.destroy())
+      .start();
+  }
+
+  private playSfx(type: 'hit' | 'fail' | 'combo'): void {
+    const g = globalThis as unknown as {
+      AudioContext?: new () => any;
+      webkitAudioContext?: new () => any;
+    };
+    const AudioContextCtor = g.AudioContext ?? g.webkitAudioContext;
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const ctx = new AudioContextCtor();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+    const frequency = type === 'fail' ? 120 : type === 'combo' ? 660 : 420;
+    const duration = type === 'fail' ? 0.16 : 0.08;
+
+    oscillator.type = type === 'fail' ? 'sawtooth' : 'triangle';
+    oscillator.frequency.setValueAtTime(frequency, now);
+    gain.gain.setValueAtTime(0.035, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+    setTimeout(() => {
+      if (typeof ctx.close === 'function') {
+        void ctx.close();
+      }
+    }, duration * 1000 + 80);
+  }
+
+  private playLightVibration(): void {
+    const wx = (globalThis as unknown as { wx?: { vibrateShort?: (data?: { type?: string }) => void } }).wx;
+    wx?.vibrateShort?.({ type: 'light' });
+  }
+
   private enterGameCompleted(): void {
     if (!this.turntable || !this.uiManager) {
       return;
@@ -578,10 +826,14 @@ export class GameManager extends Component {
 
     this.clearAllKnives();
     this._state = GameState.Win;
+    this.comboCount = 0;
+    this._reverseWarningActive = false;
+    this.unschedule(this.finishReverseWarning);
+    this.clearTimeScaleEffects();
     this.turntable.setRotateEnabled(false);
     this.uiManager.setLevel(LevelConfig.totalLevels());
     this.uiManager.setRemaining(0);
-    this.uiManager.setWinPanelContent('恭喜你顺利通关！', '重新开始', true);
+    this.uiManager.setWinPanelContent('完美命中！', '再来一把', true);
     this.uiManager.showWinPanel();
   }
 
@@ -623,7 +875,8 @@ export class GameManager extends Component {
       return;
     }
 
-    await this.preloadDir('bg', 0, 1);
+    await this.preloadDir('bg', 0, 0.55);
+    await this.preloadDir('western', 0.55, 0.45);
 
     this.uiManager.showLoading(1);
     this._bootReady = true;
