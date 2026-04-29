@@ -1,0 +1,15 @@
+# Cocos Creator generated caches
+library/
+temp/
+local/
+build/
+
+# Dependencies can be restored from package-lock.json
+node_modules/
+
+# Logs and editor noise
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

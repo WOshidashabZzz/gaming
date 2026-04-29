@@ -1,0 +1,157 @@
+export enum BlockType {
+  Annoyed = 'annoyed',
+  Anxiety = 'anxiety',
+  Pressure = 'pressure',
+  Sad = 'sad',
+  Angry = 'angry',
+  Badluck = 'badluck',
+  Happy = 'happy',
+  Relax = 'relax',
+  Calm = 'calm',
+  Hope = 'hope',
+  Grateful = 'grateful',
+  Lucky = 'lucky',
+}
+
+export enum SpecialType {
+  None = 'none',
+  Row = 'row',
+  Column = 'column',
+  Bomb = 'bomb',
+  Rainbow = 'rainbow',
+  LuckyStar = 'luckyStar',
+}
+
+export enum GoalType {
+  ClearBlock = 'clearBlock',
+  CollectPositive = 'collectPositive',
+  ClearFog = 'clearFog',
+  UseSpecial = 'useSpecial',
+  Combo = 'combo',
+  EmotionRelease = 'emotionRelease',
+  ClearCloud = 'clearCloud',
+  UnlockChain = 'unlockChain',
+  ClearNegative = 'clearNegative',
+}
+
+export enum ObstacleType {
+  Fog = 'fog',
+  Chain = 'chain',
+  Cloud = 'cloud',
+}
+
+export interface BoardPos {
+  row: number;
+  col: number;
+}
+
+export interface GoalConfig {
+  type: GoalType;
+  block?: BlockType;
+  special?: SpecialType;
+  count: number;
+}
+
+export interface ObstacleConfig {
+  type: ObstacleType;
+  positions: BoardPos[];
+}
+
+export interface LevelConfig {
+  level: number;
+  moves: number;
+  boardWidth: number;
+  boardHeight: number;
+  availableBlocks: BlockType[];
+  goals: GoalConfig[];
+  obstacles: ObstacleConfig[];
+  energyRequired: number;
+  cloudSpreadEvery?: number;
+}
+
+export interface CellState {
+  row: number;
+  col: number;
+  type: BlockType;
+  special: SpecialType;
+  fog: boolean;
+  chained: boolean;
+  cloud: boolean;
+}
+
+export interface MatchGroup {
+  cells: CellState[];
+  type: BlockType;
+  horizontal: boolean;
+  vertical: boolean;
+  isLine4: boolean;
+  isLine5: boolean;
+  isCross: boolean;
+}
+
+export interface GoalProgressEvent {
+  clearedBlocks: Partial<Record<BlockType, number>>;
+  collectedPositive: Partial<Record<BlockType, number>>;
+  clearedFog: number;
+  unlockedChains: number;
+  clearedClouds: number;
+  usedSpecial: Partial<Record<SpecialType, number>>;
+  combo: number;
+  emotionRelease: number;
+}
+
+export const NEGATIVE_BLOCKS = [
+  BlockType.Annoyed,
+  BlockType.Anxiety,
+  BlockType.Pressure,
+  BlockType.Sad,
+  BlockType.Angry,
+  BlockType.Badluck,
+];
+
+export const POSITIVE_BLOCKS = [
+  BlockType.Happy,
+  BlockType.Relax,
+  BlockType.Calm,
+  BlockType.Hope,
+  BlockType.Grateful,
+  BlockType.Lucky,
+];
+
+export const BLOCK_LABELS: Record<BlockType, string> = {
+  [BlockType.Annoyed]: '烦躁',
+  [BlockType.Anxiety]: '焦虑',
+  [BlockType.Pressure]: '压力',
+  [BlockType.Sad]: '忧郁',
+  [BlockType.Angry]: '生气',
+  [BlockType.Badluck]: '倒霉',
+  [BlockType.Happy]: '开心',
+  [BlockType.Relax]: '放松',
+  [BlockType.Calm]: '平静',
+  [BlockType.Hope]: '希望',
+  [BlockType.Grateful]: '感恩',
+  [BlockType.Lucky]: '好运',
+};
+
+export const BLOCK_COLORS: Record<BlockType, string> = {
+  [BlockType.Annoyed]: '#ff6b4a',
+  [BlockType.Anxiety]: '#9b5de5',
+  [BlockType.Pressure]: '#3a86ff',
+  [BlockType.Sad]: '#70c1ff',
+  [BlockType.Angry]: '#d62828',
+  [BlockType.Badluck]: '#5e548e',
+  [BlockType.Happy]: '#ffd866',
+  [BlockType.Relax]: '#91dc75',
+  [BlockType.Calm]: '#b68bea',
+  [BlockType.Hope]: '#ffbf59',
+  [BlockType.Grateful]: '#e983c6',
+  [BlockType.Lucky]: '#9bd979',
+};
+
+export const ENCOURAGE_LINES = [
+  '好多了。',
+  '压力被释放了一点。',
+  '今天也辛苦了。',
+  '坏情绪正在离开。',
+  '小幸运正在靠近。',
+];

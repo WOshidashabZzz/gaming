@@ -1,0 +1,44 @@
+﻿{
+    "ver":  "1.0.27",
+    "importer":  "image",
+    "imported":  true,
+    "uuid":  "112a4db4-f365-42d8-9bc0-33137ba5a343",
+    "files":  [
+                  ".json",
+                  ".png"
+              ],
+    "subMetas":  {
+                     "6c48a":  {
+                                   "importer":  "texture",
+                                   "uuid":  "112a4db4-f365-42d8-9bc0-33137ba5a343@6c48a",
+                                   "displayName":  "block_grateful",
+                                   "id":  "6c48a",
+                                   "name":  "texture",
+                                   "userData":  {
+                                                    "wrapModeS":  "clamp-to-edge",
+                                                    "wrapModeT":  "clamp-to-edge",
+                                                    "minfilter":  "linear",
+                                                    "magfilter":  "linear",
+                                                    "mipfilter":  "none",
+                                                    "anisotropy":  0,
+                                                    "isUuid":  true,
+                                                    "imageUuidOrDatabaseUri":  "112a4db4-f365-42d8-9bc0-33137ba5a343",
+                                                    "visible":  false
+                                                },
+                                   "ver":  "1.0.22",
+                                   "imported":  true,
+                                   "files":  [
+                                                 ".json"
+                                             ],
+                                   "subMetas":  {
+
+                                                }
+                               }
+                 },
+    "userData":  {
+                     "type":  "texture",
+                     "fixAlphaTransparencyArtifacts":  true,
+                     "hasAlpha":  true,
+                     "redirect":  "112a4db4-f365-42d8-9bc0-33137ba5a343@6c48a"
+                 }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "emotion-match",
+  "uuid": "8c706369-8d4e-4dd3-a4bd-2fe5807946ce",
+  "creator": {
+    "version": "3.8.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}
