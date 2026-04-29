@@ -9,8 +9,14 @@ export class EnergyManager {
     this.required = required;
   }
 
+  restore(required: number, value: number) {
+    this.required = required;
+    this.value = Math.max(0, Math.min(required, value));
+  }
+
   add(clearedNegative: number, combo: number): boolean {
-    this.value += clearedNegative * (5 + Math.max(0, combo - 1) * 2);
+    const comboBonus = combo >= 3 ? 10 : combo >= 2 ? 5 : 0;
+    this.value += clearedNegative * 5 + comboBonus;
     if (this.value < this.required) return false;
     this.value = 0;
     return true;

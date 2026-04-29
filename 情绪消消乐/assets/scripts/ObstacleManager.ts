@@ -1,48 +1,68 @@
-import { BoardPos, CellState, ObstacleConfig, ObstacleType } from './GameTypes';
+import { BoardPos, CellState, ObstacleCounts } from './GameTypes';
 
 export class ObstacleManager {
-  apply(grid: (CellState | null)[][], obstacles: ObstacleConfig[]) {
-    obstacles.forEach((obstacle) => {
-      obstacle.positions.forEach((pos) => {
-        const cell = grid[pos.row]?.[pos.col];
-        if (!cell) return;
-        if (obstacle.type === ObstacleType.Fog) cell.fog = true;
-        if (obstacle.type === ObstacleType.Chain) cell.chained = true;
-        if (obstacle.type === ObstacleType.Cloud) cell.cloud = true;
-      });
+  apply(grid: (CellState | null)[][], obstacles: ObstacleCounts) {
+    this.clear(grid);
+    this.placeFog(grid, obstacles.fog);
+  }
+
+  restoreFog(grid: (CellState | null)[][], fogMap: boolean[][]) {
+    this.clear(grid);
+    for (let row = 0; row < grid.length; row++) {
+      for (let col = 0; col < (grid[row]?.length ?? 0); col++) {
+        const cell = grid[row]?.[col];
+        if (cell) cell.fog = !!fogMap[row]?.[col];
+      }
+    }
+  }
+
+  unlockNear(_grid: (CellState | null)[][], _cleared: CellState[]): number {
+    return 0;
+  }
+
+  spreadCloud(_grid: (CellState | null)[][]): boolean {
+    return false;
+  }
+
+  private clear(grid: (CellState | null)[][]) {
+    grid.flat().forEach((cell) => {
+      if (!cell) return;
+      cell.fog = false;
+      cell.chained = false;
+      cell.cloud = false;
     });
   }
 
-  unlockNear(grid: (CellState | null)[][], cleared: CellState[]): number {
-    let count = 0;
-    cleared.forEach((cell) => {
-      this.neighbors(cell).forEach((pos) => {
-        const target = grid[pos.row]?.[pos.col];
-        if (target?.chained) {
-          target.chained = false;
-          count++;
-        }
-      });
+  private placeFog(grid: (CellState | null)[][], count: number) {
+    if (count <= 0) return;
+    const height = grid.length;
+    const width = grid[0]?.length ?? 0;
+    const rowCounts = new Array(height).fill(0);
+    const colCounts = new Array(width).fill(0);
+    const positions: BoardPos[] = [];
+    let attempts = 0;
+
+    while (positions.length < count && attempts < 1000) {
+      attempts++;
+      const row = Math.floor(Math.random() * height);
+      const col = Math.floor(Math.random() * width);
+      if (rowCounts[row] >= 3 || colCounts[col] >= 3) continue;
+      if (positions.some((pos) => pos.row === row && pos.col === col)) continue;
+      positions.push({ row, col });
+      rowCounts[row]++;
+      colCounts[col]++;
+    }
+
+    for (let row = 0; row < height && positions.length < count; row++) {
+      for (let col = 0; col < width && positions.length < count; col++) {
+        if (positions.some((pos) => pos.row === row && pos.col === col)) continue;
+        positions.push({ row, col });
+      }
+    }
+
+    positions.forEach((pos) => {
+      const cell = grid[pos.row]?.[pos.col];
+      if (cell) cell.fog = true;
     });
-    return count;
-  }
-
-  spreadCloud(grid: (CellState | null)[][]): boolean {
-    const cloudy = grid.flat().filter((cell): cell is CellState => !!cell && cell.cloud);
-    if (cloudy.length === 0 || cloudy.length > 7) return false;
-    const origin = cloudy[Math.floor(Math.random() * cloudy.length)];
-    const options = this.neighbors(origin).map((p) => grid[p.row]?.[p.col]).filter((c): c is CellState => !!c && !c.cloud);
-    if (options.length === 0) return false;
-    options[Math.floor(Math.random() * options.length)].cloud = true;
-    return true;
-  }
-
-  private neighbors(cell: BoardPos): BoardPos[] {
-    return [
-      { row: cell.row - 1, col: cell.col },
-      { row: cell.row + 1, col: cell.col },
-      { row: cell.row, col: cell.col - 1 },
-      { row: cell.row, col: cell.col + 1 },
-    ];
   }
 }

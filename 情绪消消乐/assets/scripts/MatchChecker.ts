@@ -1,78 +1,109 @@
-import { CellState, MatchGroup } from './GameTypes';
+import { BlockType, CellState, MatchGroup, SpecialType } from './GameTypes';
 
 export class MatchChecker {
   findMatches(grid: (CellState | null)[][]): MatchGroup[] {
     const height = grid.length;
     const width = grid[0]?.length ?? 0;
     const groups: MatchGroup[] = [];
-    const groupKeys = new Set<string>();
 
     for (let row = 0; row < height; row++) {
       let startCol = 0;
-      let count = 1;
+      let currentType: BlockType | null = null;
+      let count = 0;
 
-      for (let col = 1; col <= width; col++) {
-        const previous = grid[row]?.[col - 1];
-        const current = col < width ? grid[row]?.[col] : null;
-        if (previous && current && previous.type === current.type) {
+      for (let col = 0; col <= width; col++) {
+        const cell = col < width ? grid[row]?.[col] : null;
+        const type = cell?.type ?? null;
+
+        if (type && type === currentType) {
           count++;
           continue;
         }
 
-        if (previous && count >= 3) {
+        if (currentType && count >= 3) {
           const cells: CellState[] = [];
-          for (let c = startCol; c < col; c++) {
-            const cell = grid[row]?.[c];
-            if (cell) cells.push(cell);
+          for (let c = startCol; c < startCol + count; c++) {
+            const matched = grid[row]?.[c];
+            if (matched) cells.push(matched);
           }
-          this.addGroup(groups, groupKeys, cells, true, false);
+          this.addGroup(groups, cells, true, false);
         }
+
+        currentType = type;
         startCol = col;
-        count = 1;
+        count = type ? 1 : 0;
       }
     }
 
     for (let col = 0; col < width; col++) {
       let startRow = 0;
-      let count = 1;
+      let currentType: BlockType | null = null;
+      let count = 0;
 
-      for (let row = 1; row <= height; row++) {
-        const previous = grid[row - 1]?.[col];
-        const current = row < height ? grid[row]?.[col] : null;
-        if (previous && current && previous.type === current.type) {
+      for (let row = 0; row <= height; row++) {
+        const cell = row < height ? grid[row]?.[col] : null;
+        const type = cell?.type ?? null;
+
+        if (type && type === currentType) {
           count++;
           continue;
         }
 
-        if (previous && count >= 3) {
+        if (currentType && count >= 3) {
           const cells: CellState[] = [];
-          for (let r = startRow; r < row; r++) {
-            const cell = grid[r]?.[col];
-            if (cell) cells.push(cell);
+          for (let r = startRow; r < startRow + count; r++) {
+            const matched = grid[r]?.[col];
+            if (matched) cells.push(matched);
           }
-          this.addGroup(groups, groupKeys, cells, false, true);
+          this.addGroup(groups, cells, false, true);
         }
+
+        currentType = type;
         startRow = row;
-        count = 1;
+        count = type ? 1 : 0;
       }
     }
 
-    return this.mergeCrosses(groups);
+    return this.markCrosses(groups);
   }
 
   flattenMatches(groups: MatchGroup[]): CellState[] {
-    const matchSet = new Map<string, CellState>();
+    const matches = new Map<string, CellState>();
     groups.forEach((group) => {
-      group.cells.forEach((cell) => matchSet.set(`${cell.row}_${cell.col}`, cell));
+      group.cells.forEach((cell) => matches.set(`${cell.row}_${cell.col}`, cell));
     });
-    return [...matchSet.values()];
+    return [...matches.values()];
   }
 
-  private addGroup(groups: MatchGroup[], groupKeys: Set<string>, cells: CellState[], horizontal: boolean, vertical: boolean) {
+  runSelfTest() {
+    const tests = [
+      { name: 'horizontal 3', grid: [['A', 'A', 'A', 'B', 'C', 'D']], expected: 3 },
+      { name: 'horizontal 4', grid: [['A', 'A', 'A', 'A', 'C', 'D']], expected: 4 },
+      { name: 'horizontal 5', grid: [['A', 'A', 'A', 'A', 'A', 'D']], expected: 5 },
+      { name: 'vertical 5', grid: [['A'], ['A'], ['A'], ['A'], ['A'], ['D']], expected: 5 },
+      {
+        name: 'cross',
+        grid: [
+          ['B', 'B', 'A', 'C', 'D'],
+          ['C', 'D', 'A', 'B', 'C'],
+          ['A', 'A', 'A', 'A', 'A'],
+          ['D', 'C', 'A', 'D', 'B'],
+        ],
+        expected: 8,
+      },
+    ];
+
+    tests.forEach((test) => {
+      const grid = this.mockGrid(test.grid);
+      const actual = this.flattenMatches(this.findMatches(grid)).length;
+      const line = `[MatchTest] ${test.name} expected=${test.expected} actual=${actual}`;
+      if (actual === test.expected) console.log(line);
+      else console.error(line);
+    });
+  }
+
+  private addGroup(groups: MatchGroup[], cells: CellState[], horizontal: boolean, vertical: boolean) {
     if (cells.length < 3) return;
-    const key = cells.map((cell) => `${cell.row}_${cell.col}`).sort().join('|');
-    if (groupKeys.has(key)) return;
-    groupKeys.add(key);
     groups.push({
       cells,
       type: cells[0].type,
@@ -84,29 +115,36 @@ export class MatchChecker {
     });
   }
 
-  private mergeCrosses(groups: MatchGroup[]): MatchGroup[] {
-    const merged = [...groups];
-    const crossKeys = new Set<string>();
-    for (const horizontal of groups.filter((group) => group.horizontal)) {
-      for (const vertical of groups.filter((group) => group.vertical && group.type === horizontal.type)) {
-        const hasOverlap = horizontal.cells.some((a) => vertical.cells.some((b) => a.row === b.row && a.col === b.col));
-        if (!hasOverlap) continue;
-        const cells = new Map<string, CellState>();
-        [...horizontal.cells, ...vertical.cells].forEach((cell) => cells.set(`${cell.row}_${cell.col}`, cell));
-        const key = [...cells.keys()].sort().join('|');
-        if (crossKeys.has(key)) continue;
-        crossKeys.add(key);
-        merged.push({
-          cells: [...cells.values()],
-          type: horizontal.type,
-          horizontal: true,
-          vertical: true,
-          isLine4: false,
-          isLine5: false,
-          isCross: true,
-        });
-      }
-    }
-    return merged;
+  private markCrosses(groups: MatchGroup[]): MatchGroup[] {
+    groups.forEach((group) => {
+      group.isCross = groups.some((other) => {
+        if (group === other || group.type !== other.type || group.horizontal === other.horizontal) return false;
+        return group.cells.some((a) => other.cells.some((b) => a.row === b.row && a.col === b.col));
+      });
+    });
+    return groups;
+  }
+
+  private mockGrid(layout: string[][]): CellState[][] {
+    return layout.map((line, row) => line.map((key, col) => ({
+      row,
+      col,
+      type: this.mockType(key),
+      special: SpecialType.None,
+      fog: false,
+      chained: false,
+      cloud: false,
+      node: null as never,
+    })));
+  }
+
+  private mockType(key: string): BlockType {
+    const map: Record<string, BlockType> = {
+      A: BlockType.Annoyed,
+      B: BlockType.Anxiety,
+      C: BlockType.Pressure,
+      D: BlockType.Sad,
+    };
+    return map[key] ?? BlockType.Badluck;
   }
 }

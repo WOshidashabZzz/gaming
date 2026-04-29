@@ -1,3 +1,5 @@
+import { Node } from 'cc';
+
 export enum BlockType {
   Annoyed = 'annoyed',
   Anxiety = 'anxiety',
@@ -23,21 +25,11 @@ export enum SpecialType {
 }
 
 export enum GoalType {
-  ClearBlock = 'clearBlock',
-  CollectPositive = 'collectPositive',
-  ClearFog = 'clearFog',
-  UseSpecial = 'useSpecial',
+  ClearEmotion = 'clearEmotion',
+  ClearAnyNegative = 'clearAnyNegative',
   Combo = 'combo',
+  ClearFog = 'clearFog',
   EmotionRelease = 'emotionRelease',
-  ClearCloud = 'clearCloud',
-  UnlockChain = 'unlockChain',
-  ClearNegative = 'clearNegative',
-}
-
-export enum ObstacleType {
-  Fog = 'fog',
-  Chain = 'chain',
-  Cloud = 'cloud',
 }
 
 export interface BoardPos {
@@ -47,26 +39,34 @@ export interface BoardPos {
 
 export interface GoalConfig {
   type: GoalType;
-  block?: BlockType;
-  special?: SpecialType;
-  count: number;
+  emotion?: BlockType;
+  comboLevel?: number;
+  target: number;
 }
 
-export interface ObstacleConfig {
-  type: ObstacleType;
-  positions: BoardPos[];
+export interface ObstacleCounts {
+  fog: number;
+  chain: number;
+  cloud: number;
+}
+
+export interface ToolCounts {
+  star: number;
+  hammer: number;
 }
 
 export interface LevelConfig {
   level: number;
-  moves: number;
+  name: string;
+  steps: number;
   boardWidth: number;
   boardHeight: number;
   availableBlocks: BlockType[];
+  initialTools: ToolCounts;
   goals: GoalConfig[];
-  obstacles: ObstacleConfig[];
+  obstacles: ObstacleCounts;
   energyRequired: number;
-  cloudSpreadEvery?: number;
+  tutorial: string;
 }
 
 export interface CellState {
@@ -77,6 +77,7 @@ export interface CellState {
   fog: boolean;
   chained: boolean;
   cloud: boolean;
+  node: Node;
 }
 
 export interface MatchGroup {

@@ -2,6 +2,8 @@ import { _decorator, Color, Component, Graphics, ImageAsset, Label, LabelOutline
 import { BLOCK_COLORS, CellState, SpecialType } from './GameTypes';
 
 const { ccclass } = _decorator;
+const loggedLoadedSprites = new Set<string>();
+const loggedMissingSprites = new Set<string>();
 
 function hexColor(hex: string): Color {
   const value = hex.replace('#', '');
@@ -87,11 +89,22 @@ export class Block extends Component {
   }
 
   private loadSprite(state: CellState) {
-    const path = `blocks/block_${state.type}`;
+    const requestedType = state.type;
+    const path = `blocks/block_${requestedType}`;
     this.loadSpriteFrame(path, (frame) => {
-      if (frame && this.imageSprite && this.state === state) {
+      if (frame && this.imageSprite && this.state === state && this.state.type === requestedType) {
+        if (!loggedLoadedSprites.has(requestedType)) {
+          loggedLoadedSprites.add(requestedType);
+          console.log('[BlockSpriteLoaded]', requestedType, true);
+        }
         this.imageSprite.spriteFrame = frame;
         this.node.getComponent(Graphics)?.clear();
+        return;
+      }
+
+      if (!frame && !loggedMissingSprites.has(requestedType)) {
+        loggedMissingSprites.add(requestedType);
+        console.error('[BlockSpriteMissing]', requestedType);
       }
     });
   }
