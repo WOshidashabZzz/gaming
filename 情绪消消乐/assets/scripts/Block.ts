@@ -1,5 +1,5 @@
 import { _decorator, Color, Component, Graphics, ImageAsset, Label, LabelOutline, Node, Rect, resources, Size, Sprite, SpriteFrame, Texture2D, tween, UIOpacity, UITransform, Vec3 } from 'cc';
-import { BLOCK_COLORS, CellState, SpecialType } from './GameTypes';
+import { BLOCK_COLORS, BlockType, CellState, SpecialType } from './GameTypes';
 
 const { ccclass } = _decorator;
 const loggedLoadedSprites = new Set<string>();
@@ -19,6 +19,7 @@ export class Block extends Component {
   state: CellState | null = null;
   private imageSprite: Sprite | null = null;
   private badge: Label | null = null;
+  private sunLabel: Label | null = null;
 
   setup(state: CellState, size: number) {
     this.state = state;
@@ -31,7 +32,8 @@ export class Block extends Component {
 
     this.imageSprite = this.ensureImage(size).getComponent(Sprite)!;
     this.imageSprite.spriteFrame = null;
-    this.loadSprite(state);
+    this.setSunshineVisual(state.type === BlockType.Sunshine, size);
+    if (state.type !== BlockType.Sunshine) this.loadSprite(state);
 
     this.hideLabel('name');
 
@@ -39,6 +41,15 @@ export class Block extends Component {
     this.badge.string = this.getBadgeText(state.special);
     this.badge.color = hexColor('#ffffff');
     this.applyOutline(this.badge, '#5b3d91', 2);
+  }
+
+  private setSunshineVisual(active: boolean, size: number) {
+    const label = this.ensureLabel('sunshine', Math.floor(size * 0.62), 0);
+    label.node.active = active;
+    label.string = active ? '☀' : '';
+    label.color = hexColor('#fff8cf');
+    this.applyOutline(label, '#d4972d', 2);
+    this.sunLabel = label;
   }
 
   setSelected(selected: boolean) {

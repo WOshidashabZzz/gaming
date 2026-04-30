@@ -1,5 +1,6 @@
 import { _decorator, Color, Component, Label, Node, tween, UIOpacity, UITransform, Vec3 } from 'cc';
 import { AudioKey } from './AudioKeys';
+import { AudioManager } from './AudioManager';
 
 const { ccclass } = _decorator;
 
@@ -17,9 +18,14 @@ export class FeedbackManager extends Component {
   private floatNode: Node | null = null;
   private floatLabel: Label | null = null;
   private floatOpacity: UIOpacity | null = null;
+  private audio: AudioManager | null = null;
+
+  setAudioManager(audio: AudioManager) {
+    this.audio = audio;
+  }
 
   playAudio(key: AudioKey) {
-    console.log(`[Audio] ${key}`);
+    this.audio?.play(key);
   }
 
   floatText(text: string, color = '#fff0a8', y = 0) {

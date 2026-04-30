@@ -1,6 +1,6 @@
 import { _decorator, Color, Component, EventTouch, Graphics, Label, Node, tween, UIOpacity, UITransform, Vec2, Vec3 } from 'cc';
 import { Block } from './Block';
-import { BlockType, CellState, GoalProgressEvent, LevelConfig, NEGATIVE_BLOCKS, POSITIVE_BLOCKS, SpecialType } from './GameTypes';
+import { BlockType, BoardPos, CellState, GoalProgressEvent, LevelConfig, NEGATIVE_BLOCKS, POSITIVE_BLOCKS, SpecialType } from './GameTypes';
 import { MatchChecker } from './MatchChecker';
 import { ObstacleManager } from './ObstacleManager';
 
@@ -79,6 +79,10 @@ export class BoardManager extends Component {
     this.selected = null;
   }
 
+  isBusy() {
+    return this.boardLocked || this.isResolving;
+  }
+
   setPaused(paused: boolean) {
     if (this.isGameOver || this.isLevelCompleted) return;
     if (!paused) {
@@ -117,7 +121,7 @@ export class BoardManager extends Component {
       this.grid[row] = [];
       for (let col = 0; col < this.level.boardWidth; col++) {
         const restoredType = types[row][col] as BlockType | undefined;
-        const safeType = restoredType && this.level.availableBlocks.includes(restoredType) ? restoredType : this.randomType();
+        const safeType = restoredType && this.isAllowedCellType(restoredType) ? restoredType : this.randomType();
         this.grid[row][col] = this.createCell(row, col, safeType);
       }
     }
@@ -299,6 +303,13 @@ export class BoardManager extends Component {
     ]);
     this.debugCheckBoardIntegrity('after swap animation');
 
+    const sunshineCell = a.type === BlockType.Sunshine ? a : b.type === BlockType.Sunshine ? b : null;
+    if (sunshineCell) {
+      this.onMoveConsumed?.();
+      await this.triggerSunshine(sunshineCell);
+      return;
+    }
+
     const groups = this.checker.findMatches(this.grid);
     this.debug('match count', String(groups.length));
     if (groups.length === 0) {
@@ -313,15 +324,16 @@ export class BoardManager extends Component {
     }
 
     this.onMoveConsumed?.();
-    await this.resolveBoard(groups);
+    await this.resolveBoard(groups, this.findSunshineSpawn(groups, { row: a.row, col: a.col }));
   }
 
-  private async resolveBoard(initialGroups?: ReturnType<MatchChecker['findMatches']>) {
+  private async resolveBoard(initialGroups?: ReturnType<MatchChecker['findMatches']>, initialSunshineSpawn?: BoardPos | null) {
     if (this.isResolving) return;
     this.isResolving = true;
     this.boardLocked = true;
     this.combo = 0;
     let groups = initialGroups ?? this.checker.findMatches(this.grid);
+    let sunshineSpawn = initialSunshineSpawn ?? null;
     let loopCount = 0;
 
     try {
@@ -329,7 +341,8 @@ export class BoardManager extends Component {
         this.combo++;
         const cells = this.checker.flattenMatches(groups);
         this.debug('resolve groups', groups.map((group) => `${group.type}:${group.cells.length}`).join(', '));
-        const event = await this.clearMatches(cells, this.combo);
+        const event = await this.clearMatches(cells, this.combo, sunshineSpawn);
+        sunshineSpawn = null;
         this.onResolve?.(event, { negative: this.countNegative(event), combo: this.combo });
         if (this.combo === 2) this.onFeedback?.('不错！');
         if (this.combo === 3) this.onFeedback?.('好多了！');
@@ -358,10 +371,11 @@ export class BoardManager extends Component {
     }
   }
 
-  private async clearMatches(cells: CellState[], combo: number): Promise<GoalProgressEvent> {
+  private async clearMatches(cells: CellState[], combo: number, sunshineSpawn?: BoardPos | null): Promise<GoalProgressEvent> {
     const event = this.emptyEvent();
     const unique = this.uniqueCells(cells);
     const animations: Promise<void>[] = [];
+    const preservedForSunshine = sunshineSpawn ? this.grid[sunshineSpawn.row]?.[sunshineSpawn.col] ?? null : null;
 
     unique.forEach((cell) => {
       const current = this.grid[cell.row]?.[cell.col];
@@ -370,12 +384,22 @@ export class BoardManager extends Component {
         return;
       }
 
+      if (preservedForSunshine && current === preservedForSunshine) {
+        if (current.fog) event.clearedFog++;
+        if (current.cloud) event.clearedClouds++;
+        current.fog = false;
+        current.cloud = false;
+        if (POSITIVE_BLOCKS.includes(current.type)) event.collectedPositive[current.type] = (event.collectedPositive[current.type] ?? 0) + 1;
+        else if (NEGATIVE_BLOCKS.includes(current.type)) event.clearedBlocks[current.type] = (event.clearedBlocks[current.type] ?? 0) + 1;
+        return;
+      }
+
       if (current.fog) event.clearedFog++;
       if (current.cloud) event.clearedClouds++;
       current.fog = false;
       current.cloud = false;
       if (POSITIVE_BLOCKS.includes(current.type)) event.collectedPositive[current.type] = (event.collectedPositive[current.type] ?? 0) + 1;
-      else event.clearedBlocks[current.type] = (event.clearedBlocks[current.type] ?? 0) + 1;
+      else if (NEGATIVE_BLOCKS.includes(current.type)) event.clearedBlocks[current.type] = (event.clearedBlocks[current.type] ?? 0) + 1;
 
       tween(current.node).stop();
       animations.push(current.node.getComponent(Block)!.playClear());
@@ -386,9 +410,18 @@ export class BoardManager extends Component {
     unique.forEach((cell) => {
       const current = this.grid[cell.row]?.[cell.col];
       if (!current || current !== cell) return;
+      if (preservedForSunshine && current === preservedForSunshine) return;
       this.grid[cell.row][cell.col] = null;
       this.recycleBlock(current.node);
     });
+
+    if (preservedForSunshine && this.grid[preservedForSunshine.row]?.[preservedForSunshine.col] === preservedForSunshine) {
+      preservedForSunshine.type = BlockType.Sunshine;
+      preservedForSunshine.special = SpecialType.None;
+      this.setupCellNode(preservedForSunshine);
+      await this.animateSunshineCreated(preservedForSunshine.node);
+      this.onFeedback?.('治愈阳光');
+    }
 
     event.unlockedChains += this.obstacles.unlockNear(this.grid, unique);
     event.combo = combo;
@@ -422,6 +455,44 @@ export class BoardManager extends Component {
     } finally {
       if (!this.isGameOver && !this.isLevelCompleted && this.canAcceptMove()) this.boardLocked = false;
     }
+  }
+
+  private async triggerSunshine(sunshine: CellState) {
+    const current = this.grid[sunshine.row]?.[sunshine.col];
+    if (!current || current !== sunshine || current.type !== BlockType.Sunshine) {
+      this.boardLocked = false;
+      return;
+    }
+
+    this.clearDrag();
+    this.selected?.node.getComponent(Block)?.setSelected(false);
+    this.selected = null;
+    this.onFeedback?.('阳光散开');
+
+    try {
+      const cells = this.sunshineAreaCells(current);
+      const event = await this.clearMatches(cells, 1);
+      this.onResolve?.(event, { negative: this.countNegative(event), combo: 1 });
+      await this.collapseAndFill();
+      this.repairEmptyCellsIfNeeded('after sunshine');
+      if (!this.isGameOver && !this.isLevelCompleted && this.canAcceptMove()) await this.resolveBoard();
+    } finally {
+      if (!this.isGameOver && !this.isLevelCompleted && this.canAcceptMove()) this.boardLocked = false;
+    }
+  }
+
+  private sunshineAreaCells(center: CellState): CellState[] {
+    const cells: CellState[] = [];
+    for (let row = center.row - 1; row <= center.row + 1; row++) {
+      for (let col = center.col - 1; col <= center.col + 1; col++) {
+        if (row < 0 || row >= this.level.boardHeight || col < 0 || col >= this.level.boardWidth) continue;
+        const candidate = this.grid[row]?.[col];
+        if (!candidate) continue;
+        if (candidate.type === BlockType.Sunshine && candidate !== center) continue;
+        cells.push(candidate);
+      }
+    }
+    return cells;
   }
 
   private async collapseAndFill() {
@@ -473,7 +544,7 @@ export class BoardManager extends Component {
 
   private createCell(row: number, col: number, type: BlockType): CellState {
     const node = this.acquireBlockNode();
-    const safeType = this.level.availableBlocks.includes(type) ? type : this.randomType();
+    const safeType = this.isAllowedCellType(type) ? type : this.randomType();
     const cell: CellState = {
       row,
       col,
@@ -544,7 +615,7 @@ export class BoardManager extends Component {
 
   private renderObstacleOverlays(node: Node, cell: CellState) {
     ['fog', 'chain', 'cloud'].forEach((name) => node.getChildByName(name)?.destroy());
-    if (cell.fog) this.overlay(node, 'fog', '#34344faa', '雾');
+    if (cell.fog) this.overlay(node, 'fog', '#34344faa', '');
     if (cell.chained) this.overlay(node, 'chain', '#f2eefaaa', '锁');
     if (cell.cloud) this.overlay(node, 'cloud', '#5f6077bb', '云');
   }
@@ -621,6 +692,29 @@ export class BoardManager extends Component {
     return available[Math.floor(Math.random() * available.length)];
   }
 
+  private isAllowedCellType(type: BlockType): boolean {
+    return this.level.availableBlocks.includes(type) || (!!this.level.enableSunshine && type === BlockType.Sunshine);
+  }
+
+  private findSunshineSpawn(groups: ReturnType<MatchChecker['findMatches']>, preferred: BoardPos): BoardPos | null {
+    if (!this.level.enableSunshine) return null;
+    const candidates = groups.filter((group) => group.type !== BlockType.Sunshine && group.cells.length >= 4);
+    if (candidates.length === 0) return null;
+
+    const containingPreferred = candidates.find((group) => group.cells.some((cell) => cell.row === preferred.row && cell.col === preferred.col));
+    const group = containingPreferred ?? candidates[0];
+    const preferredInGroup = group.cells.find((cell) => cell.row === preferred.row && cell.col === preferred.col);
+    if (preferredInGroup) return { row: preferredInGroup.row, col: preferredInGroup.col };
+
+    const sorted = [...group.cells].sort((a, b) => {
+      const distanceA = Math.abs(a.row - preferred.row) + Math.abs(a.col - preferred.col);
+      const distanceB = Math.abs(b.row - preferred.row) + Math.abs(b.col - preferred.col);
+      return distanceA - distanceB;
+    });
+    const closest = sorted[0];
+    return closest ? { row: closest.row, col: closest.col } : null;
+  }
+
   private uniqueCells(cells: CellState[]): CellState[] {
     const map = new Map<string, CellState>();
     cells.filter(Boolean).forEach((cell) => map.set(`${cell.row}_${cell.col}`, cell));
@@ -661,6 +755,18 @@ export class BoardManager extends Component {
     return new Promise((resolve) => {
       tween(node)
         .to(duration, { position }, { easing: 'quadOut' })
+        .call(() => resolve())
+        .start();
+    });
+  }
+
+  private animateSunshineCreated(node: Node): Promise<void> {
+    tween(node).stop();
+    node.setScale(new Vec3(0.5, 0.5, 1));
+    return new Promise((resolve) => {
+      tween(node)
+        .to(0.12, { scale: new Vec3(1.12, 1.12, 1) }, { easing: 'quadOut' })
+        .to(0.1, { scale: Vec3.ONE }, { easing: 'quadOut' })
         .call(() => resolve())
         .start();
     });

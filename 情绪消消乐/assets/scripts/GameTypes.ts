@@ -6,6 +6,7 @@ export enum BlockType {
   Pressure = 'pressure',
   Sad = 'sad',
   Badluck = 'badluck',
+  Sunshine = 'sunshine',
   Happy = 'happy',
   Relax = 'relax',
   Calm = 'calm',
@@ -56,6 +57,7 @@ export interface ToolCounts {
 
 export interface LevelConfig {
   level: number;
+  chapter?: number;
   name: string;
   steps: number;
   boardWidth: number;
@@ -66,6 +68,7 @@ export interface LevelConfig {
   obstacles: ObstacleCounts;
   energyRequired: number;
   tutorial: string;
+  enableSunshine?: boolean;
 }
 
 export interface CellState {
@@ -123,6 +126,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   [BlockType.Pressure]: '压力',
   [BlockType.Sad]: '忧郁',
   [BlockType.Badluck]: '倒霉',
+  [BlockType.Sunshine]: '治愈阳光',
   [BlockType.Happy]: '开心',
   [BlockType.Relax]: '放松',
   [BlockType.Calm]: '平静',
@@ -137,6 +141,7 @@ export const BLOCK_COLORS: Record<BlockType, string> = {
   [BlockType.Pressure]: '#3a86ff',
   [BlockType.Sad]: '#70c1ff',
   [BlockType.Badluck]: '#5e548e',
+  [BlockType.Sunshine]: '#ffd95a',
   [BlockType.Happy]: '#ffd866',
   [BlockType.Relax]: '#91dc75',
   [BlockType.Calm]: '#b68bea',

@@ -1,5 +1,6 @@
-import { _decorator, Component, Node, ResolutionPolicy, UITransform, view } from 'cc';
+import { _decorator, Component, EventKeyboard, input, Input, KeyCode, Node, ResolutionPolicy, UITransform, view } from 'cc';
 import { AudioKey } from './AudioKeys';
+import { AudioManager } from './AudioManager';
 import { BoardManager, ToolMode } from './BoardManager';
 import { EnergyManager } from './EnergyManager';
 import { FeedbackManager } from './FeedbackManager';
@@ -12,6 +13,8 @@ const { ccclass } = _decorator;
 const DEBUG_MATCH3 = false;
 const SAVE_KEY = 'emotion_match_save';
 const UNLOCKED_KEY = 'emotion_match_unlocked_level';
+const DEV_SKIP_TAP_COUNT = 5;
+const DEV_SKIP_WINDOW_MS = 2000;
 
 interface SaveData {
   currentLevel: number;
@@ -29,6 +32,7 @@ interface SaveData {
 export class GameManager extends Component {
   private static booted = false;
   private ui!: UIManager;
+  private audio!: AudioManager;
   private board!: BoardManager;
   private feedback!: FeedbackManager;
   private levelManager = new LevelManager();
@@ -41,6 +45,8 @@ export class GameManager extends Component {
   private starCount = 1;
   private hammerCount = 1;
   private activeTool: ToolMode | null = null;
+  private devSkipTapCount = 0;
+  private devSkipWindowStartedAt = 0;
 
   start() {
     if (GameManager.booted) {
@@ -51,16 +57,19 @@ export class GameManager extends Component {
     view.setDesignResolutionSize(720, 1280, ResolutionPolicy.SHOW_ALL);
     this.ensureRootSize();
     this.ui = this.node.addComponent(UIManager);
+    this.audio = this.node.addComponent(AudioManager);
+    this.audio.init();
     this.feedback = this.node.addComponent(FeedbackManager);
+    this.feedback.setAudioManager(this.audio);
     this.ui.build();
-    this.ui.onStartGame = () => this.startLevel(this.getUnlockedLevel());
+    this.ui.onStartGame = () => this.startNewGame();
     this.ui.onRestartFromFirst = () => this.restartFromFirstLevel();
     this.ui.onContinueGame = () => this.continueSavedGame();
     this.ui.onRetry = () => this.startLevel(this.levelManager.currentNumber);
     this.ui.onNextLevel = () => this.startLevel(this.levelManager.next().level);
     this.ui.onHome = () => {
       this.ui.showHome();
-      this.ui.updateHomeSaveState(this.hasSaveData());
+      this.ui.updateHomeSaveState(this.hasProgressData());
     };
     this.ui.onPause = () => this.pauseGame();
     this.ui.onResume = () => this.resumeGame();
@@ -68,13 +77,28 @@ export class GameManager extends Component {
     this.ui.onPauseHome = () => this.pauseToHome();
     this.ui.onStar = () => this.selectTool('star');
     this.ui.onHammer = () => this.selectTool('hammer');
+    this.ui.onDevCornerTap = () => this.handleDevCornerTap();
+    this.ui.onSettings = () => this.showSettings();
+    this.ui.onToggleMusic = () => this.toggleMusic();
+    this.ui.onToggleSfx = () => this.toggleSfx();
+    this.ui.onButtonClick = () => this.feedback.playAudio(AudioKey.Button);
+    input.on(Input.EventType.KEY_DOWN, this.handleKeyDown, this);
     if (typeof window !== 'undefined') window.addEventListener('beforeunload', () => this.saveCurrentProgress());
     this.ui.showLoading(0.2);
     this.scheduleOnce(() => this.ui.showLoading(0.75), 0.15);
     this.scheduleOnce(() => {
       this.ui.showHome();
-      this.ui.updateHomeSaveState(this.hasSaveData());
+      this.ui.updateHomeSaveState(this.hasProgressData());
     }, 0.35);
+  }
+
+  private startNewGame() {
+    if (this.hasProgressData()) {
+      this.feedback.floatText('已有进度，请继续游戏', '#fff3a8', 120);
+      this.ui.updateHomeSaveState(true);
+      return;
+    }
+    this.startLevel(1);
   }
 
   private startLevel(levelNumber: number, saveData?: SaveData) {
@@ -108,7 +132,10 @@ export class GameManager extends Component {
       this.refreshHud();
       this.debug(`remaining moves=${this.movesLeft}`);
     };
-    this.board.onFeedback = (text) => this.feedback.floatText(text, '#fff3a8', 80);
+    this.board.onFeedback = (text) => {
+      this.feedback.floatText(text, '#fff3a8', 80);
+      if (text.includes('阳光')) this.feedback.playAudio(AudioKey.Special);
+    };
     this.board.onResolve = (event, energyPayload) => this.applyProgress(event, energyPayload.negative, energyPayload.combo);
     this.board.onToolUsed = (tool) => this.consumeTool(tool);
     this.board.onBoardSettled = () => this.handleBoardSettled();
@@ -140,7 +167,9 @@ export class GameManager extends Component {
     this.board?.lockBoard();
     this.feedback.playAudio(win ? AudioKey.Win : AudioKey.Fail);
     if (win) {
-      const nextLevel = Math.min(this.levelManager.currentNumber + 1, this.levelManager.maxNumber);
+      const nextLevel = this.levelManager.currentNumber >= this.levelManager.maxNumber
+        ? 1
+        : this.levelManager.currentNumber + 1;
       localStorage.setItem(UNLOCKED_KEY, String(nextLevel));
       localStorage.removeItem(SAVE_KEY);
       this.ui.updateHomeSaveState(false);
@@ -196,6 +225,21 @@ export class GameManager extends Component {
     this.refreshHud();
   }
 
+  private showSettings() {
+    this.ui.showSettings(this.audio.isMusicEnabled(), this.audio.isSfxEnabled());
+  }
+
+  private toggleMusic() {
+    this.audio.toggleMusic();
+    this.showSettings();
+  }
+
+  private toggleSfx() {
+    const enabled = this.audio.toggleSfx();
+    if (enabled) this.feedback.playAudio(AudioKey.Button);
+    this.showSettings();
+  }
+
   private resumeGame() {
     if (!this.isPaused) return;
     this.isPaused = false;
@@ -214,17 +258,27 @@ export class GameManager extends Component {
     this.isPaused = false;
     this.ui.hidePopup();
     this.ui.showHome();
-    this.ui.updateHomeSaveState(this.hasSaveData());
+    this.ui.updateHomeSaveState(this.hasProgressData());
   }
 
   private continueSavedGame() {
     const data = this.loadSavedProgress();
+    if (data) {
+      this.startLevel(data.currentLevel, data);
+      return;
+    }
+
+    const unlockedLevel = this.getUnlockedLevel();
+    if (unlockedLevel > 1) {
+      this.startLevel(unlockedLevel);
+      return;
+    }
+
     if (!data) {
       this.feedback.floatText('暂无进度', '#fff3a8', 120);
       this.ui.updateHomeSaveState(false);
       return;
     }
-    this.startLevel(data.currentLevel, data);
   }
 
   private restartFromFirstLevel() {
@@ -234,6 +288,51 @@ export class GameManager extends Component {
     this.ended = false;
     this.activeTool = null;
     this.startLevel(1);
+  }
+
+  private handleDevCornerTap() {
+    if (this.ended || this.isPaused || !this.board) return;
+
+    const now = Date.now();
+    if (now - this.devSkipWindowStartedAt > DEV_SKIP_WINDOW_MS) {
+      this.devSkipWindowStartedAt = now;
+      this.devSkipTapCount = 0;
+    }
+
+    this.devSkipTapCount += 1;
+    if (this.devSkipTapCount < DEV_SKIP_TAP_COUNT) return;
+
+    this.devSkipTapCount = 0;
+    this.devSkipWindowStartedAt = 0;
+    this.devSkipLevel();
+  }
+
+  private handleKeyDown(event: EventKeyboard) {
+    if (event.keyCode === KeyCode.KEY_T) this.devSkipLevel();
+  }
+
+  private devSkipLevel() {
+    if (!this.board || this.ended || this.isPaused) return;
+    if (this.board?.isBusy()) {
+      this.feedback.floatText('请稍等', '#fff3a8', 150);
+      return;
+    }
+
+    this.activeTool = null;
+    this.board?.setToolMode(null);
+
+    const currentLevel = this.levelManager.currentNumber;
+    if (currentLevel >= this.levelManager.maxNumber) {
+      this.feedback.floatText('开发者跳关：章节完成', '#fff3a8', 150);
+      this.finish(true);
+      return;
+    }
+
+    const nextLevel = currentLevel + 1;
+    localStorage.setItem(UNLOCKED_KEY, String(nextLevel));
+    localStorage.removeItem(SAVE_KEY);
+    this.feedback.floatText(`开发者跳关：第${nextLevel}关`, '#fff3a8', 150);
+    this.startLevel(nextLevel);
   }
 
   private handleBoardSettled() {
@@ -271,6 +370,10 @@ export class GameManager extends Component {
 
   private hasSaveData(): boolean {
     return !!localStorage.getItem(SAVE_KEY);
+  }
+
+  private hasProgressData(): boolean {
+    return this.hasSaveData() || this.getUnlockedLevel() > 1;
   }
 
   private getUnlockedLevel(): number {

@@ -26,6 +26,7 @@ export class UIManager extends Component {
 
   private loadingFill!: Node;
   private loadingLabel!: Label;
+  private startButton!: ButtonParts;
   private continueButton!: ButtonParts;
   private starButton!: ButtonParts;
   private hammerButton!: ButtonParts;
@@ -42,6 +43,11 @@ export class UIManager extends Component {
   onPauseHome: (() => void) | null = null;
   onStar: (() => void) | null = null;
   onHammer: (() => void) | null = null;
+  onDevCornerTap: (() => void) | null = null;
+  onSettings: (() => void) | null = null;
+  onToggleMusic: (() => void) | null = null;
+  onToggleSfx: (() => void) | null = null;
+  onButtonClick: (() => void) | null = null;
 
   build() {
     this.node.removeAllChildren();
@@ -79,16 +85,20 @@ export class UIManager extends Component {
     this.popupLayer.active = false;
   }
 
-  updateHomeSaveState(hasSave: boolean) {
-    if (!this.continueButton) return;
-    this.continueButton.button.interactable = hasSave;
-    this.continueButton.label.string = hasSave ? '继续游戏' : '暂无进度';
-    this.paintButton(this.continueButton, hasSave ? '#a88ee8' : '#8f8a9a');
+  updateHomeSaveState(hasProgress: boolean) {
+    if (!this.continueButton || !this.startButton) return;
+    this.startButton.button.interactable = !hasProgress;
+    this.paintButton(this.startButton, hasProgress ? '#8f8a9a' : '#9bdd7a');
+    this.continueButton.button.interactable = hasProgress;
+    this.continueButton.label.string = hasProgress ? '继续游戏' : '暂无进度';
+    this.paintButton(this.continueButton, hasProgress ? '#a88ee8' : '#8f8a9a');
   }
 
   updateHud(level: number, moves: number, goals: string[], energyPercent: number) {
     this.movesLabel.string = `第${level}关  步数 ${moves}`;
     this.goalsLabel.string = goals.join('\n');
+    this.goalsLabel.fontSize = goals.length >= 5 ? 18 : goals.length >= 4 ? 20 : 23;
+    this.goalsLabel.lineHeight = goals.length >= 5 ? 21 : goals.length >= 4 ? 24 : 30;
     this.energyFill.setScale(new Vec3(Math.max(0.02, energyPercent), 1, 1));
   }
 
@@ -120,6 +130,17 @@ export class UIManager extends Component {
     this.button(panel, '返回主页', 0, -105, '#a88ee8', () => this.onPauseHome?.());
   }
 
+  showSettings(musicEnabled: boolean, sfxEnabled: boolean) {
+    this.popupLayer.removeAllChildren();
+    this.popupLayer.active = true;
+    const panel = this.panel(this.popupLayer, 500, 390, '#f7eafff4');
+    panel.setPosition(0, 0, 0);
+    this.text(panel, '设置', 42, 0, 125, '#664c9e');
+    this.button(panel, musicEnabled ? '音乐：开' : '音乐：关', 0, 40, musicEnabled ? '#9bdd7a' : '#8f8a9a', () => this.onToggleMusic?.());
+    this.button(panel, sfxEnabled ? '音效：开' : '音效：关', 0, -35, sfxEnabled ? '#ffe07a' : '#8f8a9a', () => this.onToggleSfx?.());
+    this.button(panel, '关闭', 0, -120, '#a88ee8', () => this.hidePopup());
+  }
+
   hidePopup() {
     this.popupLayer.active = false;
     this.popupLayer.removeAllChildren();
@@ -128,22 +149,22 @@ export class UIManager extends Component {
   showResult(win: boolean, score: number, level: number, maxLevel = 20) {
     this.popupLayer.removeAllChildren();
     this.popupLayer.active = true;
-    const panel = this.panel(this.popupLayer, 540, 440, '#f7eaffee');
-    panel.setPosition(0, 0, 0);
     const chapterEnd = win && level >= maxLevel;
-    const title = chapterEnd ? `第${level}关完成！` : win ? '关卡完成' : '还差一点';
-    const titleLabel = this.text(panel, title, 42, 0, 145, '#664c9e');
+    const panel = this.panel(this.popupLayer, chapterEnd ? 600 : 540, chapterEnd ? 540 : 440, '#f7eaffee');
+    panel.setPosition(0, 0, 0);
+    const title = chapterEnd ? '坏心情已清理完成！' : win ? '关卡完成' : '还差一点';
+    const titleLabel = this.text(panel, title, chapterEnd ? 38 : 42, 0, chapterEnd ? 185 : 145, '#664c9e');
     titleLabel.node.getComponent(UITransform)?.setContentSize(460, 70);
-    const message = chapterEnd ? '你已经清理了一大波坏心情。\n更多关卡即将开启。' : win ? '今天的心情亮了一点。' : '没关系，再试一次。';
-    const messageLabel = this.text(panel, message, 24, 0, 72, '#6f6390');
+    const message = chapterEnd ? '你消除了烦躁、焦虑、压力、低落和坏运气。\n也重新找回了一点点好心情。\n\n明天也许还会有新的情绪，\n但今天，已经做得很好了。' : win ? '今天的心情亮了一点。' : '没关系，再试一次。';
+    const messageLabel = this.text(panel, message, chapterEnd ? 23 : 24, 0, chapterEnd ? 76 : 72, '#6f6390');
     messageLabel.lineHeight = 32;
     messageLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
-    messageLabel.node.getComponent(UITransform)?.setContentSize(460, 80);
-    this.text(panel, win ? '★ ★ ★' : '☆ ☆ ☆', 56, 0, 5, win ? '#ffd15b' : '#b8add2');
-    this.text(panel, `得分 ${score}`, 25, 0, -58, '#4d4272');
+    messageLabel.node.getComponent(UITransform)?.setContentSize(chapterEnd ? 520 : 460, chapterEnd ? 190 : 80);
+    this.text(panel, win ? '★ ★ ★' : '☆ ☆ ☆', chapterEnd ? 48 : 56, 0, chapterEnd ? -68 : 5, win ? '#ffd15b' : '#b8add2');
+    this.text(panel, `得分 ${score}`, 25, 0, chapterEnd ? -125 : -58, '#4d4272');
     if (chapterEnd) {
-      this.button(panel, '返回首页', -110, -145, '#a88ee8', () => this.onHome?.());
-      this.button(panel, '重新挑战', 110, -145, '#9bdd7a', () => this.onRetry?.());
+      this.button(panel, '返回首页', -110, -200, '#a88ee8', () => this.onHome?.());
+      this.button(panel, '重新挑战第30关', 110, -200, '#9bdd7a', () => this.onRetry?.());
       return;
     }
     this.button(panel, win ? '继续下一关' : '重新开始', -110, -145, '#9bdd7a', () => (win ? this.onNextLevel?.() : this.onRetry?.()));
@@ -151,7 +172,7 @@ export class UIManager extends Component {
   }
 
   private buildLoading() {
-    this.loadBg(this.loadingLayer, 'bg/bg_home_night');
+    this.loadBg(this.loadingLayer, 'bg/bg_home_clear');
     this.text(this.loadingLayer, '情绪消消乐', 56, 0, 190, '#ffffff');
     this.text(this.loadingLayer, '把坏心情轻轻放下', 26, 0, 120, '#fff6c9');
     const track = this.panel(this.loadingLayer, 430, 24, '#e8def5cc');
@@ -163,12 +184,13 @@ export class UIManager extends Component {
   }
 
   private buildHome() {
-    this.loadBg(this.homeLayer, 'bg/bg_home_night');
-    this.button(this.homeLayer, '开始游戏', 0, -220, '#9bdd7a', () => this.onStartGame?.());
+    this.loadBg(this.homeLayer, 'bg/bg_home_clear');
+    this.text(this.homeLayer, '情绪消消乐', 48, 0, -10, '#fff7d8');
+    this.startButton = this.button(this.homeLayer, '开始游戏', 0, -220, '#9bdd7a', () => this.onStartGame?.());
     this.continueButton = this.button(this.homeLayer, '暂无进度', 0, -292, '#a88ee8', () => this.onContinueGame?.());
     this.button(this.homeLayer, '重新开始', 0, -364, '#ffb06d', () => this.onRestartFromFirst?.());
-    this.iconButton(this.homeLayer, '⚙', -245, 535);
-    this.iconButton(this.homeLayer, '♪', 245, 535);
+    this.iconButton(this.homeLayer, '⚙', -245, 535, () => this.onSettings?.());
+    this.iconButton(this.homeLayer, '♪', 245, 535, () => this.onSettings?.());
   }
 
   private buildGame() {
@@ -176,10 +198,11 @@ export class UIManager extends Component {
     const top = this.panel(this.gameLayer, 660, 172, '#f4edffee');
     top.setPosition(0, 510, 0);
     this.movesLabel = this.text(top, '第1关  步数 24', 32, 0, 50, '#554287');
-    this.goalsLabel = this.text(top, '', 23, -190, -30, '#554287');
+    this.goalsLabel = this.text(top, '', 23, -140, -30, '#554287');
     this.goalsLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
     this.goalsLabel.lineHeight = 30;
-    this.goalsLabel.node.getComponent(UITransform)?.setContentSize(340, 108);
+    this.goalsLabel.overflow = Label.Overflow.SHRINK;
+    this.goalsLabel.node.getComponent(UITransform)?.setContentSize(300, 130);
     this.text(top, '情绪能量', 20, 165, -8, '#66558d');
     const bar = this.panel(top, 210, 22, '#d8cced');
     bar.setPosition(165, -40, 0);
@@ -197,6 +220,12 @@ export class UIManager extends Component {
 
     const bottom = this.panel(this.gameLayer, 640, 112, '#f4edffee');
     bottom.setPosition(0, -270, 0);
+    const devHotspot = this.panel(this.gameLayer, 132, 132, '#00000001');
+    devHotspot.name = 'devSkipHotspot';
+    devHotspot.setPosition(-294, 574, 0);
+    devHotspot.addComponent(Button);
+    devHotspot.on(Button.EventType.CLICK, () => this.onDevCornerTap?.(), this);
+    devHotspot.setSiblingIndex(999);
     this.starButton = this.button(bottom, '星星 x1', -200, 0, '#ffe07a', () => this.onStar?.());
     this.hammerButton = this.button(bottom, '锤子 x1', 0, 0, '#ffb06d', () => this.onHammer?.());
     this.button(bottom, '暂停', 200, 0, '#a88ee8', () => this.onPause?.());
@@ -237,14 +266,24 @@ export class UIManager extends Component {
     node.name = `button_${label}`;
     node.setPosition(x, y, 0);
     const button = node.addComponent(Button);
-    node.on(Button.EventType.CLICK, handler, this);
+    node.on(Button.EventType.CLICK, () => {
+      this.onButtonClick?.();
+      handler();
+    }, this);
     const text = this.text(node, label, 24, 0, 0, '#ffffff');
     return { node, button, label: text, color };
   }
 
-  private iconButton(parent: Node, label: string, x: number, y: number) {
+  private iconButton(parent: Node, label: string, x: number, y: number, handler?: () => void) {
     const node = this.panel(parent, 64, 64, '#ffffff55');
     node.setPosition(x, y, 0);
+    if (handler) {
+      node.addComponent(Button);
+      node.on(Button.EventType.CLICK, () => {
+        this.onButtonClick?.();
+        handler();
+      }, this);
+    }
     this.text(node, label, 30, 0, 0, '#ffffff');
   }
 

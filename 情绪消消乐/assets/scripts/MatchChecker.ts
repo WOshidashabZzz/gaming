@@ -13,7 +13,7 @@ export class MatchChecker {
 
       for (let col = 0; col <= width; col++) {
         const cell = col < width ? grid[row]?.[col] : null;
-        const type = cell?.type ?? null;
+        const type = this.matchableType(cell);
 
         if (type && type === currentType) {
           count++;
@@ -42,7 +42,7 @@ export class MatchChecker {
 
       for (let row = 0; row <= height; row++) {
         const cell = row < height ? grid[row]?.[col] : null;
-        const type = cell?.type ?? null;
+        const type = this.matchableType(cell);
 
         if (type && type === currentType) {
           count++;
@@ -113,6 +113,11 @@ export class MatchChecker {
       isLine5: cells.length >= 5,
       isCross: false,
     });
+  }
+
+  private matchableType(cell: CellState | null | undefined): BlockType | null {
+    if (!cell || cell.type === BlockType.Sunshine) return null;
+    return cell.type;
   }
 
   private markCrosses(groups: MatchGroup[]): MatchGroup[] {
