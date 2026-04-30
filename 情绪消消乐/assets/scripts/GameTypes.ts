@@ -5,7 +5,6 @@ export enum BlockType {
   Anxiety = 'anxiety',
   Pressure = 'pressure',
   Sad = 'sad',
-  Angry = 'angry',
   Badluck = 'badluck',
   Happy = 'happy',
   Relax = 'relax',
@@ -106,7 +105,6 @@ export const NEGATIVE_BLOCKS = [
   BlockType.Anxiety,
   BlockType.Pressure,
   BlockType.Sad,
-  BlockType.Angry,
   BlockType.Badluck,
 ];
 
@@ -124,7 +122,6 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   [BlockType.Anxiety]: '焦虑',
   [BlockType.Pressure]: '压力',
   [BlockType.Sad]: '忧郁',
-  [BlockType.Angry]: '生气',
   [BlockType.Badluck]: '倒霉',
   [BlockType.Happy]: '开心',
   [BlockType.Relax]: '放松',
@@ -139,7 +136,6 @@ export const BLOCK_COLORS: Record<BlockType, string> = {
   [BlockType.Anxiety]: '#9b5de5',
   [BlockType.Pressure]: '#3a86ff',
   [BlockType.Sad]: '#70c1ff',
-  [BlockType.Angry]: '#d62828',
   [BlockType.Badluck]: '#5e548e',
   [BlockType.Happy]: '#ffd866',
   [BlockType.Relax]: '#91dc75',

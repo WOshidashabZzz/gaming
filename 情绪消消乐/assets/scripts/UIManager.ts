@@ -125,19 +125,25 @@ export class UIManager extends Component {
     this.popupLayer.removeAllChildren();
   }
 
-  showResult(win: boolean, score: number, level: number) {
+  showResult(win: boolean, score: number, level: number, maxLevel = 20) {
     this.popupLayer.removeAllChildren();
     this.popupLayer.active = true;
     const panel = this.panel(this.popupLayer, 540, 440, '#f7eaffee');
     panel.setPosition(0, 0, 0);
-    const chapterEnd = win && level === 10;
-    const title = chapterEnd ? '小幸运回来了' : win ? '关卡完成' : '还差一点';
-    this.text(panel, title, 42, 0, 145, '#664c9e');
-    this.text(panel, chapterEnd ? '今天的坏情绪被认真清理掉了。' : win ? '今天的心情亮了一点。' : '没关系，再试一次。', 25, 0, 74, '#6f6390');
+    const chapterEnd = win && level >= maxLevel;
+    const title = chapterEnd ? `第${level}关完成！` : win ? '关卡完成' : '还差一点';
+    const titleLabel = this.text(panel, title, 42, 0, 145, '#664c9e');
+    titleLabel.node.getComponent(UITransform)?.setContentSize(460, 70);
+    const message = chapterEnd ? '你已经清理了一大波坏心情。\n更多关卡即将开启。' : win ? '今天的心情亮了一点。' : '没关系，再试一次。';
+    const messageLabel = this.text(panel, message, 24, 0, 72, '#6f6390');
+    messageLabel.lineHeight = 32;
+    messageLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+    messageLabel.node.getComponent(UITransform)?.setContentSize(460, 80);
     this.text(panel, win ? '★ ★ ★' : '☆ ☆ ☆', 56, 0, 5, win ? '#ffd15b' : '#b8add2');
     this.text(panel, `得分 ${score}`, 25, 0, -58, '#4d4272');
     if (chapterEnd) {
-      this.button(panel, '返回主页', 0, -145, '#a88ee8', () => this.onHome?.());
+      this.button(panel, '返回首页', -110, -145, '#a88ee8', () => this.onHome?.());
+      this.button(panel, '重新挑战', 110, -145, '#9bdd7a', () => this.onRetry?.());
       return;
     }
     this.button(panel, win ? '继续下一关' : '重新开始', -110, -145, '#9bdd7a', () => (win ? this.onNextLevel?.() : this.onRetry?.()));
@@ -167,13 +173,13 @@ export class UIManager extends Component {
 
   private buildGame() {
     this.loadBg(this.gameLayer, 'bg/bg_level_night');
-    const top = this.panel(this.gameLayer, 660, 158, '#f4edffee');
+    const top = this.panel(this.gameLayer, 660, 172, '#f4edffee');
     top.setPosition(0, 510, 0);
-    this.movesLabel = this.text(top, '第1关  步数 24', 32, 0, 44, '#554287');
-    this.goalsLabel = this.text(top, '', 25, -190, -28, '#554287');
+    this.movesLabel = this.text(top, '第1关  步数 24', 32, 0, 50, '#554287');
+    this.goalsLabel = this.text(top, '', 23, -190, -30, '#554287');
     this.goalsLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
-    this.goalsLabel.lineHeight = 34;
-    this.goalsLabel.node.getComponent(UITransform)?.setContentSize(320, 96);
+    this.goalsLabel.lineHeight = 30;
+    this.goalsLabel.node.getComponent(UITransform)?.setContentSize(340, 108);
     this.text(top, '情绪能量', 20, 165, -8, '#66558d');
     const bar = this.panel(top, 210, 22, '#d8cced');
     bar.setPosition(165, -40, 0);

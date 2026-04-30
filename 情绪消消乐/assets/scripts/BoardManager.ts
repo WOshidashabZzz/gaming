@@ -116,7 +116,9 @@ export class BoardManager extends Component {
       if (!types[row] || types[row].length !== this.level.boardWidth) return false;
       this.grid[row] = [];
       for (let col = 0; col < this.level.boardWidth; col++) {
-        this.grid[row][col] = this.createCell(row, col, types[row][col] ?? this.randomType());
+        const restoredType = types[row][col] as BlockType | undefined;
+        const safeType = restoredType && this.level.availableBlocks.includes(restoredType) ? restoredType : this.randomType();
+        this.grid[row][col] = this.createCell(row, col, safeType);
       }
     }
     this.refreshAllBlockViews();
@@ -471,10 +473,11 @@ export class BoardManager extends Component {
 
   private createCell(row: number, col: number, type: BlockType): CellState {
     const node = this.acquireBlockNode();
+    const safeType = this.level.availableBlocks.includes(type) ? type : this.randomType();
     const cell: CellState = {
       row,
       col,
-      type,
+      type: safeType,
       special: SpecialType.None,
       fog: false,
       chained: false,

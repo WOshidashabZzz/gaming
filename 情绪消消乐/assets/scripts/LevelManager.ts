@@ -21,4 +21,8 @@ export class LevelManager {
   get currentNumber(): number {
     return this.currentIndex + 1;
   }
+
+  get maxNumber(): number {
+    return LEVELS.length;
+  }
 }

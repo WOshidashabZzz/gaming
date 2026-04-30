@@ -140,12 +140,12 @@ export class GameManager extends Component {
     this.board?.lockBoard();
     this.feedback.playAudio(win ? AudioKey.Win : AudioKey.Fail);
     if (win) {
-      const nextLevel = Math.min(this.levelManager.currentNumber + 1, 10);
+      const nextLevel = Math.min(this.levelManager.currentNumber + 1, this.levelManager.maxNumber);
       localStorage.setItem(UNLOCKED_KEY, String(nextLevel));
       localStorage.removeItem(SAVE_KEY);
       this.ui.updateHomeSaveState(false);
     }
-    this.scheduleOnce(() => this.ui.showResult(win, this.score, this.levelManager.currentNumber), 0.3);
+    this.scheduleOnce(() => this.ui.showResult(win, this.score, this.levelManager.currentNumber, this.levelManager.maxNumber), 0.3);
   }
 
   private refreshHud() {
@@ -275,7 +275,7 @@ export class GameManager extends Component {
 
   private getUnlockedLevel(): number {
     const saved = Number(localStorage.getItem(UNLOCKED_KEY) ?? '1');
-    return Math.max(1, Math.min(10, Number.isFinite(saved) ? saved : 1));
+    return Math.max(1, Math.min(this.levelManager.maxNumber, Number.isFinite(saved) ? saved : 1));
   }
 
   private showTutorialIfNeeded(level: number, name: string, tutorial: string) {
@@ -283,7 +283,7 @@ export class GameManager extends Component {
     if (localStorage.getItem(key)) return;
     this.isPaused = true;
     this.board?.setPaused(true);
-    this.ui.showTutorial(name, tutorial, () => {
+    this.ui.showTutorial(`第 ${level} 关：${name}`, tutorial, () => {
       localStorage.setItem(key, '1');
       this.ui.hidePopup();
       this.isPaused = false;
